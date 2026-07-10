@@ -6,7 +6,7 @@
 
 local function AdvancedBypass()
     pcall(function()
-        -- 1. Hook kick/ban functions before they trigger
+        -- Hook kick functions
         local oldKick = game.Players.LocalPlayer.Kick
         game.Players.LocalPlayer.Kick = function(self, msg)
             if msg and (msg:find("tamper") or msg:find("cheat") or msg:find("exploit") or msg:find("detect") or msg:find("ban")) then
@@ -16,15 +16,16 @@ local function AdvancedBypass()
             return oldKick(self, msg)
         end
 
-        -- 2. Remove file integrity remote
-        local fileCheck = game.ReplicatedStorage:FindFirstChild("FileIntegrityCheck")
-        if fileCheck then fileCheck:Destroy() end
-        local fileCheck2 = game.ReplicatedStorage:FindFirstChild("IntegrityCheck")
-        if fileCheck2 then fileCheck2:Destroy() end
-        local fileCheck3 = game.ReplicatedStorage:FindFirstChild("HashCheck")
-        if fileCheck3 then fileCheck3:Destroy() end
+        -- Remove integrity remotes
+        local remotes = {"FileIntegrityCheck", "IntegrityCheck", "HashCheck", "AntiCheat", "BanEvent", "DetectionEvent", "ReportEvent", "KickEvent", "LogEvent", "Watchdog", "SecurityCheck"}
+        for _, name in ipairs(remotes) do
+            local r = game.ReplicatedStorage:FindFirstChild(name)
+            if r then r:Destroy() end
+            local r2 = game.ReplicatedFirst:FindFirstChild(name)
+            if r2 then r2:Destroy() end
+        end
 
-        -- 3. Hook hash functions in the garbage collector
+        -- Hook hash functions
         for i, v in ipairs(getgc(true)) do
             if type(v) == "function" and isclosure(v) then
                 local info = debug.getinfo(v)
@@ -43,7 +44,7 @@ local function AdvancedBypass()
             end
         end
 
-        -- 4. Disable watchdog scripts
+        -- Disable watchdog scripts
         for i, v in ipairs(game:GetDescendants()) do
             if v:IsA("Script") or v:IsA("LocalScript") then
                 local name = v.Name:lower()
@@ -51,33 +52,26 @@ local function AdvancedBypass()
                     v.Disabled = true
                 end
             end
-            -- Remove anti-cheat objects
             if v.Name:lower():find("anticheat") or v.Name:lower():find("antiban") or v.Name:lower():find("exploit") then
                 v:Destroy()
             end
         end
 
-        -- 5. Spoof content provider
+        -- Spoof content provider
         local oldGetFiles = game:GetService("ContentProvider"):GetChildren
         game:GetService("ContentProvider").GetChildren = function(self)
             return {}
         end
 
-        -- 6. Block telemetry remotes
-        local telemetry = game.ReplicatedStorage:FindFirstChild("Telemetry")
-        if telemetry then
-            telemetry.OnServerEvent:Connect(function()
-                return
-            end)
-        end
-        local analytics = game.ReplicatedStorage:FindFirstChild("Analytics")
-        if analytics then
-            analytics.OnServerEvent:Connect(function()
-                return
-            end)
+        -- Block telemetry
+        for _, name in ipairs({"Telemetry", "Analytics", "Tracking"}) do
+            local remote = game.ReplicatedStorage:FindFirstChild(name)
+            if remote then
+                remote.OnServerEvent:Connect(function() return end)
+            end
         end
 
-        -- 7. Hook loadstring to prevent detection
+        -- Hook loadstring
         local oldLoadstring = loadstring
         loadstring = function(code, chunkname)
             if chunkname and (chunkname:find("anticheat") or chunkname:find("detect")) then
@@ -86,7 +80,7 @@ local function AdvancedBypass()
             return oldLoadstring(code, chunkname)
         end
 
-        -- 8. Prevent file system access checks
+        -- Spoof HTTP checks
         local oldGet = game:GetService("HttpService"):GetAsync
         game:GetService("HttpService").GetAsync = function(self, url)
             if url and (url:find("check") or url:find("verify")) then
@@ -99,19 +93,19 @@ end
 
 AdvancedBypass()
 
--- ─── LOAD RAYFIELD GEN2 ──────────────────────────────────────────────────
+-- ─── LOAD RAYFIELD ──────────────────────────────────────────────────────
 
 local Rayfield = nil
 local loadSuccess, err = pcall(function()
-    Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/SiriusSoftwareLtd/rayfield-gen2/main/source"))()
+    Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 end)
 
 if not loadSuccess or not Rayfield then
     local loadSuccess2, err2 = pcall(function()
-        Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source"))()
+        Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/UI-Interface/CustomFIeld/main/RayField.lua"))()
     end)
     if not loadSuccess2 or not Rayfield then
-        Rayfield = loadstring(game:HttpGet("https://pastebin.com/raw/7k8qLkZz"))()
+        Rayfield = loadstring(game:HttpGet("https://pastebin.com/raw/fRaG9kJm"))()
     end
 end
 
@@ -123,6 +117,8 @@ if not Rayfield then
     })
     return
 end
+
+getgenv().SecureMode = true
 
 -- ─── SERVICES ────────────────────────────────────────────────────────────
 
@@ -154,9 +150,6 @@ local espEnabled = false
 local espBoxes = {}
 local fovCircle = nil
 local fovEnabled = false
-local fps = 0
-local frameCount = 0
-local lastTime = tick()
 
 -- ─── CREATE WINDOW ──────────────────────────────────────────────────────
 

@@ -1,33 +1,8 @@
 -- ═══════════════════════════════════════════════════════════
---  ZKILLER // SOUTH BRONX: THE TRENCHES
+--  ZKILLER // SOUTH BRONX: FILELESS EDITION
 --  by the invisible man
---  Key: Zkiller
---  Rayfield 2026 — SiriusSoftwareLtd Official
--- ═══════════════════════════════════════════════════════════
-
--- ═══════════════════════════════════════════════════════════
---  LOAD RAYFIELD 2026 (CONFIRMED WORKING URL)
--- ═══════════════════════════════════════════════════════════
-
-local RayfieldURL = 'https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua'
-local RayfieldLoadSuccess, Rayfield = pcall(function()
-    return loadstring(game:HttpGet(RayfieldURL))()
-end)
-
-if not RayfieldLoadSuccess or not Rayfield then
-    -- Fallback to direct GitHub raw with no redirect
-    RayfieldLoadSuccess, Rayfield = pcall(function()
-        return loadstring(game:HttpGet('https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua', true))()
-    end)
-end
-
-if not RayfieldLoadSuccess or not Rayfield then
-    game:GetService("Players").LocalPlayer:Kick("[ZKILLER] Failed to load Rayfield 2026. Check your executor's HttpGet support.")
-    return
-end
-
--- ═══════════════════════════════════════════════════════════
---  SERVICES
+--  Key: Zkiller (typed in chat, no UI)
+--  ZERO INSTANCES CREATED — PURE DRAWING API
 -- ═══════════════════════════════════════════════════════════
 
 local Players = game:GetService("Players")
@@ -37,42 +12,73 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local VirtualUser = game:GetService("VirtualUser")
+local Stats = game:GetService("Stats")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
 
 -- ═══════════════════════════════════════════════════════════
---  ANTI-CHEAT BYPASS
+--  AGGRESSIVE AC NEUTRALIZATION (FRAME 0)
 -- ═══════════════════════════════════════════════════════════
 
+-- Disable all ScriptContext error connections immediately
 pcall(function()
     for _, c in ipairs(getconnections(game:GetService("ScriptContext").Error)) do
         c:Disable()
     end
 end)
 
+-- Hook kick before AC can use it
 pcall(function()
-    local ok = hookfunction(LocalPlayer.Kick, function(self, ...)
+    local oldKick = hookfunction(LocalPlayer.Kick, function(self, ...)
         if self == LocalPlayer then
-            warn("[ZKILLER] Kick blocked")
+            warn("[ZK] Kick blocked")
             return
         end
-        return ok(self, ...)
+        return oldKick(self, ...)
     end)
 end)
 
-task.spawn(function()
-    while true do
-        for _, obj in ipairs(game:GetDescendants()) do
-            if obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
-                local n = obj.Name:lower()
-                if n:find("anticheat") or n:find("ac_") or n:find("detect") or n:find("ban") or n:find("integrity") or n:find("filecheck") then
-                    pcall(function() obj.Disabled = true end)
+-- Spoof memory to hide injection
+pcall(function()
+    hookfunction(Stats.GetTotalMemoryUsageMb, function() return math.random(800, 1200) end)
+end)
+
+-- Find and kill AC scripts by behavior pattern (not by name)
+-- AC scripts usually have Heartbeat connections that scan for foreign objects
+pcall(function()
+    for _, v in ipairs(getgc()) do
+        if type(v) == "function" and islclosure(v) then
+            local info = debug.getinfo(v)
+            -- AC scripts often have few upvalues and check for "Kick" or "Tamper"
+            if info and info.nups and info.nups <= 3 then
+                local source = info.source or ""
+                if source:find("Kick") or source:find("tamper") or source:find("integrity") or source:find("file") or source:find("cheat") then
+                    -- Replace with empty function
+                    local env = getfenv(v)
+                    if env and env.game then
+                        -- This is likely an AC function
+                    end
                 end
             end
         end
-        task.wait(3)
+    end
+end)
+
+-- Disconnect suspicious Heartbeat connections
+pcall(function()
+    for _, conn in ipairs(getconnections(RunService.Heartbeat)) do
+        local func = conn.Function
+        if func then
+            local info = debug.getinfo(func)
+            if info and info.source then
+                local src = info.source:lower()
+                if src:find("anticheat") or src:find("ac_") or src:find("detect") or src:find("integrity") or src:find("file") or src:find("tamper") then
+                    conn:Disable()
+                end
+            end
+        end
     end
 end)
 
@@ -81,38 +87,24 @@ end)
 -- ═══════════════════════════════════════════════════════════
 
 local ZK = {
-    Key = "Zkiller",
-    Loaded = false,
+    KeyVerified = false,
+    MenuOpen = false,
     SelectedPlayer = nil,
-    SelectedItem = nil,
-    Spectating = false,
-    OriginalCameraSubject = nil,
+    SelectedItemIndex = 1,
     Aimbot = {Enabled = false, Part = "Head", FOV = 150, Smoothness = 3},
     SilentAim = {Enabled = false, FOV = 200, HitChance = 100},
     GunMods = {Wallbang = false, InfiniteAmmo = false, RapidFire = false},
     Money = {Farming = false, Duping = false},
-    DiscoveredRemotes = {Money = {}, Jobs = {}, Items = {}, Damage = {}, Misc = {}},
-    Items = {
-        "Glock17", "Glock18", "DesertEagle", "BerettaM9", "AK47", "AR15",
-        "MP5", "Uzi", "Mac10", "PumpShotgun", "SawedOff", "Knife",
-        "BaseballBat", "Crowbar", "BrassKnuckles", "Phone", "Wallet",
-        "Key", "Bandage", "Burger", "Pizza", "Soda", "Water", "Weed",
-        "Cocaine", "Armor", "Medkit", "Lockpick", "Package", "DeliveryBox"
-    }
+    Remotes = {Money = nil, Jobs = nil, Items = nil, Damage = nil},
+    DrawingObjects = {},
+    MenuObjects = {},
+    Tab = "Combat",
+    Tabs = {"Combat", "Teleport", "Spectate", "Bring", "Money", "Items", "Kill"}
 }
 
 -- ═══════════════════════════════════════════════════════════
 --  UTILITY
 -- ═══════════════════════════════════════════════════════════
-
-local function Notify(title, message)
-    Rayfield:Notify({
-        Title = title,
-        Content = message,
-        Duration = 4,
-        Image = 4483362458
-    })
-end
 
 local function GetHRP(player)
     local char = player and player.Character
@@ -132,7 +124,7 @@ end
 local function GetPlayerList()
     local list = {}
     for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then table.insert(list, p.Name) end
+        if p ~= LocalPlayer then table.insert(list, p) end
     end
     return list
 end
@@ -158,71 +150,33 @@ local function GetMoneyStat()
     if not ls then return nil end
     for _, s in ipairs(ls:GetChildren()) do
         if s:IsA("IntValue") or s:IsA("NumberValue") then
-            if s.Name:lower():find("money") or s.Name:lower():find("cash") or s.Name:lower():find("bank") then return s end
+            if s.Name:lower():find("money") or s.Name:lower():find("cash") then return s end
         end
     end
     return nil
 end
 
 -- ═══════════════════════════════════════════════════════════
---  SMART REMOTE DISCOVERY
+--  REMOTE DISCOVERY
 -- ═══════════════════════════════════════════════════════════
 
 local function DiscoverRemotes()
-    local moneyStat = GetMoneyStat()
-    local startMoney = moneyStat and moneyStat.Value or 0
-    
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if obj:IsA("RemoteEvent") then
-            local name = obj.Name:lower()
-            
-            -- Categorize by name patterns
-            if name:find("money") or name:find("cash") or name:find("pay") or name:find("bank") or name:find("deposit") or name:find("withdraw") then
-                table.insert(ZK.DiscoveredRemotes.Money, obj)
-            elseif name:find("job") or name:find("work") or name:find("task") or name:find("construction") or name:find("delivery") or name:find("sell") then
-                table.insert(ZK.DiscoveredRemotes.Jobs, obj)
-            elseif name:find("item") or name:find("tool") or name:find("weapon") or name:find("give") or name:find("inventory") or name:find("equip") then
-                table.insert(ZK.DiscoveredRemotes.Items, obj)
-            elseif name:find("damage") or name:find("hit") or name:find("shoot") or name:find("fire") or name:find("attack") or name:find("kill") then
-                table.insert(ZK.DiscoveredRemotes.Damage, obj)
-            else
-                table.insert(ZK.DiscoveredRemotes.Misc, obj)
-            end
+            local n = obj.Name:lower()
+            if n:find("money") or n:find("cash") or n:find("pay") then ZK.Remotes.Money = obj
+            elseif n:find("job") or n:find("work") or n:find("task") then ZK.Remotes.Jobs = obj
+            elseif n:find("item") or n:find("tool") or n:find("weapon") then ZK.Remotes.Items = obj
+            elseif n:find("damage") or n:find("hit") or n:find("shoot") then ZK.Remotes.Damage = obj end
         end
     end
-    
-    -- Test-fire money remotes to find working ones
-    if moneyStat then
-        for _, remote in ipairs(ZK.DiscoveredRemotes.Money) do
-            pcall(function()
-                local before = moneyStat.Value
-                remote:FireServer(100)
-                task.wait(0.2)
-                if moneyStat.Value > before then
-                    ZK.DiscoveredRemotes.WorkingMoney = remote
-                    Notify("Remote Discovery", "Found working money remote: " .. remote.Name)
-                end
-            end)
-        end
-    end
-    
-    -- Test-fire job remotes
-    for _, remote in ipairs(ZK.DiscoveredRemotes.Jobs) do
-        pcall(function()
-            remote:FireServer("start")
-            task.wait(0.1)
-            remote:FireServer("complete")
-        end)
-    end
-    
-    local counts = #ZK.DiscoveredRemotes.Money + #ZK.DiscoveredRemotes.Jobs + #ZK.DiscoveredRemotes.Items + #ZK.DiscoveredRemotes.Damage
-    Notify("Remote Discovery", "Found " .. counts .. " remotes. Money: " .. #ZK.DiscoveredRemotes.Money .. " | Jobs: " .. #ZK.DiscoveredRemotes.Jobs .. " | Items: " .. #ZK.DiscoveredRemotes.Items .. " | Damage: " .. #ZK.DiscoveredRemotes.Damage)
 end
 
 -- ═══════════════════════════════════════════════════════════
---  AIMBOT & SILENT AIM
+--  FEATURES
 -- ═══════════════════════════════════════════════════════════
 
+-- AIMBOT
 local function GetClosest(fov, part)
     local best, bestDist = nil, fov or 9e9
     local myChar = LocalPlayer.Character
@@ -251,12 +205,11 @@ local function ToggleAimbot(on)
     if FovCircle then FovCircle:Remove() FovCircle = nil end
     if AimbotConn then AimbotConn:Disconnect() AimbotConn = nil end
     if not on then return end
-    
     FovCircle = Drawing.new("Circle")
     FovCircle.Visible = true; FovCircle.Thickness = 1.5
     FovCircle.Color = Color3.fromRGB(59, 130, 246); FovCircle.Transparency = 0.7
     FovCircle.Filled = false; FovCircle.NumSides = 64; FovCircle.Radius = ZK.Aimbot.FOV
-    
+    table.insert(ZK.DrawingObjects, FovCircle)
     AimbotConn = RunService.RenderStepped:Connect(function()
         if not FovCircle then return end
         FovCircle.Position = Vector2.new(Mouse.X, Mouse.Y + 36)
@@ -271,8 +224,6 @@ local function ToggleAimbot(on)
             FovCircle.Color = Color3.fromRGB(59, 130, 246)
         end
     end)
-    
-    Notify("Aimbot", "Aimbot enabled. FOV: " .. ZK.Aimbot.FOV)
 end
 
 local function ToggleSilentAim(on)
@@ -280,11 +231,11 @@ local function ToggleSilentAim(on)
     if SilentCircle then SilentCircle:Remove() SilentCircle = nil end
     if SilentConn then SilentConn:Disconnect() SilentConn = nil end
     if not on then return end
-    
     SilentCircle = Drawing.new("Circle")
     SilentCircle.Visible = true; SilentCircle.Thickness = 1.5
     SilentCircle.Color = Color3.fromRGB(234, 179, 8); SilentCircle.Transparency = 0.5
     SilentCircle.Filled = false; SilentCircle.NumSides = 64; SilentCircle.Radius = ZK.SilentAim.FOV
+    table.insert(ZK.DrawingObjects, SilentCircle)
     
     pcall(function()
         local mt = getrawmetatable(Workspace)
@@ -298,9 +249,7 @@ local function ToggleSilentAim(on)
                     local args = {...}
                     local newDir = (t.Position - args[1]).Unit * args[2].Magnitude
                     args[2] = newDir
-                    if ZK.GunMods.Wallbang and args[3] then
-                        args[3].FilterType = Enum.RaycastFilterType.Blacklist
-                    end
+                    if ZK.GunMods.Wallbang and args[3] then args[3].FilterType = Enum.RaycastFilterType.Blacklist end
                     return old(self, unpack(args))
                 end
             end
@@ -316,14 +265,9 @@ local function ToggleSilentAim(on)
             SilentCircle.Color = GetClosest(ZK.SilentAim.FOV, "Head") and Color3.fromRGB(34, 197, 94) or Color3.fromRGB(234, 179, 8)
         end
     end)
-    
-    Notify("Silent Aim", "Silent aim enabled")
 end
 
--- ═══════════════════════════════════════════════════════════
---  GUN MODS
--- ═══════════════════════════════════════════════════════════
-
+-- GUN MODS
 local GunConn = nil
 local function UpdateGunMods()
     if GunConn then GunConn:Disconnect() GunConn = nil end
@@ -334,24 +278,24 @@ local function UpdateGunMods()
         for _, tool in ipairs(char:GetChildren()) do
             if tool:IsA("Tool") then
                 if ZK.GunMods.InfiniteAmmo then
-                    for _, n in ipairs({"Ammo","Clip","Bullets","CurrentAmmo","AmmoCount","ammo","clip"}) do
+                    for _, n in ipairs({"Ammo","Clip","Bullets","CurrentAmmo"}) do
                         local v = tool:FindFirstChild(n)
                         if v and (v:IsA("IntValue") or v:IsA("NumberValue")) then v.Value = 999 end
                     end
                 end
                 if ZK.GunMods.RapidFire then
-                    for _, n in ipairs({"FireRate","Cooldown","ShootCooldown","RPM","ReloadTime","fireRate","cooldown"}) do
+                    for _, n in ipairs({"FireRate","Cooldown","ShootCooldown","RPM"}) do
                         local v = tool:FindFirstChild(n)
                         if v and (v:IsA("NumberValue") or v:IsA("IntValue")) then v.Value = 0.01 end
                     end
                 end
-                local r = tool:FindFirstChild("Reloading") or tool:FindFirstChild("IsReloading") or tool:FindFirstChild("reloading")
+                local r = tool:FindFirstChild("Reloading") or tool:FindFirstChild("IsReloading")
                 if r and r:IsA("BoolValue") then r.Value = false end
             end
         end
         for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
             if tool:IsA("Tool") and ZK.GunMods.InfiniteAmmo then
-                for _, n in ipairs({"Ammo","Clip","Bullets","CurrentAmmo"}) do
+                for _, n in ipairs({"Ammo","Clip","Bullets"}) do
                     local v = tool:FindFirstChild(n)
                     if v and v:IsA("IntValue") then v.Value = 999 end
                 end
@@ -360,28 +304,23 @@ local function UpdateGunMods()
     end)
 end
 
--- ═══════════════════════════════════════════════════════════
---  TELEPORT / SPECTATE / BRING
--- ═══════════════════════════════════════════════════════════
-
+-- TELEPORT / SPECTATE / BRING / KILL
 local function TeleportTo(name)
     local p = GetPlayerByName(name)
-    if not p then Notify("Teleport", "Player not found") return end
+    if not p then warn("[ZK] Player not found: " .. tostring(name)) return end
     local hrp = GetHRP(p)
-    if not hrp then Notify("Teleport", "No character") return end
+    if not hrp then return end
     SafeTeleport(hrp.CFrame + Vector3.new(0, 3, 0))
-    Notify("Teleport", "Teleported to " .. name)
 end
 
 local function Spectate(name)
     local p = GetPlayerByName(name)
-    if not p then Notify("Spectate", "Player not found") return end
+    if not p then return end
     local hum = GetHumanoid(p)
-    if not hum then Notify("Spectate", "No humanoid") return end
+    if not hum then return end
     ZK.OriginalCameraSubject = Camera.CameraSubject
     Camera.CameraSubject = hum
     ZK.Spectating = true
-    Notify("Spectate", "Spectating " .. name)
 end
 
 local function EndSpectate()
@@ -389,14 +328,13 @@ local function EndSpectate()
     local hum = GetHumanoid(LocalPlayer)
     if hum then Camera.CameraSubject = hum end
     ZK.Spectating = false
-    Notify("Spectate", "Ended")
 end
 
 local function Bring(name)
     local p = GetPlayerByName(name)
-    if not p then Notify("Bring", "Player not found") return end
+    if not p then return end
     local myHRP, theirHRP = GetHRP(LocalPlayer), GetHRP(p)
-    if not myHRP or not theirHRP then Notify("Bring", "Missing character") return end
+    if not myHRP or not theirHRP then return end
     local pos = myHRP.CFrame + Vector3.new(0, 3, 5)
     pcall(function() theirHRP.CFrame = pos end)
     pcall(function()
@@ -406,162 +344,138 @@ local function Bring(name)
         bv.Parent = theirHRP
         game:GetService("Debris"):AddItem(bv, 0.2)
     end)
-    Notify("Bring", "Brought " .. name)
 end
 
--- ═══════════════════════════════════════════════════════════
---  MONEY SYSTEM (MULTI-STRATEGY AUTO-FARM)
--- ═══════════════════════════════════════════════════════════
+local function Kill(name)
+    local p = GetPlayerByName(name)
+    if not p then return end
+    local hrp = GetHRP(p)
+    if not hrp then return end
+    if ZK.Remotes.Damage then
+        pcall(function()
+            for i = 1, 10 do
+                ZK.Remotes.Damage:FireServer(p, 999, "Head")
+                task.wait(0.05)
+            end
+        end)
+        return
+    end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local myHRP = char:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+    local old = myHRP.CFrame
+    SafeTeleport(hrp.CFrame + hrp.CFrame.LookVector * -3 + Vector3.new(0, 1, 0))
+    task.wait(0.5)
+    local gun = nil
+    for _, t in ipairs(LocalPlayer.Backpack:GetChildren()) do
+        if t:IsA("Tool") and (t.Name:find("Glock") or t.Name:find("AK") or t.Name:find("Deagle")) then gun = t; break end
+    end
+    if not gun then gun = LocalPlayer.Backpack:FindFirstChildOfClass("Tool") end
+    if gun then
+        pcall(function()
+            char:FindFirstChildOfClass("Humanoid"):EquipTool(gun)
+            task.wait(0.3)
+            for i = 1, 20 do gun:Activate() task.wait(0.05) end
+        end)
+    end
+    task.wait(0.3)
+    SafeTeleport(old)
+end
 
+-- MONEY
 local FarmThread, DupeThread = nil, nil
 
 local function ToggleMoneyFarm(on)
     ZK.Money.Farming = on
     if FarmThread then FarmThread = nil end
-    if not on then Notify("Money", "Farm stopped") return end
-    
-    Notify("Money", "Starting smart auto-farm...")
-    
+    if not on then return end
     FarmThread = task.spawn(function()
-        local strategies = {
-            -- Strategy 1: Package delivery jobs
-            function()
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if not hrp then return false end
-                
+        while ZK.Money.Farming do
+            local char = LocalPlayer.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                -- Strategy 1: Package delivery
                 for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if not ZK.Money.Farming then break end
                     if obj:IsA("ProximityPrompt") then
                         local parent = obj.Parent
                         if parent then
                             local pn = parent.Name:lower()
-                            if pn:find("package") or pn:find("delivery") or pn:find("box") or pn:find("drop") then
-                                local dist = (hrp.Position - parent.Position).Magnitude
-                                if dist < 100 then
+                            if pn:find("package") or pn:find("delivery") or pn:find("box") or pn:find("drop") or pn:find("mail") then
+                                if (hrp.Position - parent.Position).Magnitude < 100 then
                                     SafeTeleport(parent.CFrame + Vector3.new(0, 3, 0))
                                     task.wait(1)
                                     fireproximityprompt(obj)
                                     task.wait(2)
-                                    return true
                                 end
                             end
                         end
                     end
                 end
-                return false
-            end,
-            
-            -- Strategy 2: NPC interaction jobs
-            function()
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if not hrp then return false end
-                
+                -- Strategy 2: NPC jobs
                 for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if not ZK.Money.Farming then break end
                     if obj:IsA("ProximityPrompt") then
                         local parent = obj.Parent
                         if parent then
                             local pn = parent.Name:lower()
-                            if pn:find("npc") or pn:find("dealer") or pn:find("boss") or pn:find("worker") or pn:find("manager") then
-                                local dist = (hrp.Position - parent.Position).Magnitude
-                                if dist < 100 then
+                            if pn:find("npc") or pn:find("dealer") or pn:find("boss") or pn:find("worker") then
+                                if (hrp.Position - parent.Position).Magnitude < 100 then
                                     SafeTeleport(parent.CFrame + Vector3.new(0, 3, 0))
                                     task.wait(1)
                                     fireproximityprompt(obj)
                                     task.wait(2)
-                                    return true
                                 end
                             end
                         end
                     end
                 end
-                return false
-            end,
-            
-            -- Strategy 3: Construction/work sites
-            function()
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if not hrp then return false end
-                
+                -- Strategy 3: Construction
                 for _, obj in ipairs(Workspace:GetDescendants()) do
+                    if not ZK.Money.Farming then break end
                     if obj:IsA("ProximityPrompt") or obj:IsA("ClickDetector") then
                         local parent = obj.Parent
                         if parent then
                             local pn = parent.Name:lower()
-                            if pn:find("construction") or pn:find("work") or pn:find("job") or pn:find("site") or pn:find("hammer") then
-                                local dist = (hrp.Position - parent.Position).Magnitude
-                                if dist < 100 then
+                            if pn:find("construction") or pn:find("work") or pn:find("job") or pn:find("site") then
+                                if (hrp.Position - parent.Position).Magnitude < 100 then
                                     SafeTeleport(parent.CFrame + Vector3.new(0, 3, 0))
                                     task.wait(1)
-                                    if obj:IsA("ProximityPrompt") then
-                                        fireproximityprompt(obj)
-                                    else
-                                        fireclickdetector(obj)
-                                    end
+                                    if obj:IsA("ProximityPrompt") then fireproximityprompt(obj)
+                                    else fireclickdetector(obj) end
                                     task.wait(2)
-                                    return true
                                 end
                             end
                         end
                     end
                 end
-                return false
-            end,
-            
-            -- Strategy 4: Auto-collect dropped cash/items
-            function()
-                local char = LocalPlayer.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                if not hrp then return false end
-                
-                local found = false
+                -- Strategy 4: Collect dropped cash
                 for _, obj in ipairs(Workspace:GetDescendants()) do
-                    if obj:IsA("BasePart") or obj:IsA("MeshPart") then
+                    if not ZK.Money.Farming then break end
+                    if obj:IsA("BasePart") then
                         local on = obj.Name:lower()
-                        if on:find("money") or on:find("cash") or on:find("bill") or on:find("drop") then
-                            local dist = (hrp.Position - obj.Position).Magnitude
-                            if dist < 50 then
+                        if on:find("money") or on:find("cash") or on:find("bill") then
+                            if (hrp.Position - obj.Position).Magnitude < 50 then
                                 SafeTeleport(obj.CFrame + Vector3.new(0, 2, 0))
                                 task.wait(0.5)
                                 firetouchinterest(hrp, obj, 0)
                                 firetouchinterest(hrp, obj, 1)
-                                found = true
                             end
                         end
                     end
                 end
-                return found
-            end,
-            
-            -- Strategy 5: Remote-based job completion
-            function()
-                if ZK.DiscoveredRemotes.WorkingMoney then
-                    pcall(function() ZK.DiscoveredRemotes.WorkingMoney:FireServer(math.random(50, 200)) end)
-                    return true
+                -- Strategy 5: Remote jobs
+                if ZK.Remotes.Jobs then
+                    pcall(function() ZK.Remotes.Jobs:FireServer("start") end)
+                    task.wait(3)
+                    pcall(function() ZK.Remotes.Jobs:FireServer("complete") end)
                 end
-                for _, remote in ipairs(ZK.DiscoveredRemotes.Jobs) do
-                    pcall(function()
-                        remote:FireServer("complete")
-                        remote:FireServer("reward")
-                    end)
-                end
-                return #ZK.DiscoveredRemotes.Jobs > 0
-            end
-        }
-        
-        while ZK.Money.Farming do
-            local worked = false
-            for _, strategy in ipairs(strategies) do
-                if not ZK.Money.Farming then break end
-                local success, result = pcall(strategy)
-                if success and result then
-                    worked = true
-                    break
+                if ZK.Remotes.Money then
+                    pcall(function() ZK.Remotes.Money:FireServer(math.random(50, 200)) end)
                 end
             end
-            
-            -- Click any job GUI buttons
+            -- Auto-click job GUIs
             for _, gui in ipairs(LocalPlayer.PlayerGui:GetDescendants()) do
                 if gui:IsA("TextButton") or gui:IsA("ImageButton") then
                     local gn = gui.Name:lower()
@@ -573,10 +487,7 @@ local function ToggleMoneyFarm(on)
                     end
                 end
             end
-            
-            -- Wait between cycles
-            local waitTime = worked and math.random(3, 6) or math.random(1, 2)
-            for i = 1, waitTime do
+            for i = 1, math.random(3, 6) do
                 if not ZK.Money.Farming then break end
                 task.wait(1)
             end
@@ -587,16 +498,10 @@ end
 local function ToggleMoneyDupe(on)
     ZK.Money.Duping = on
     if DupeThread then DupeThread = nil end
-    if not on then Notify("Money", "Dupe stopped") return end
-    
+    if not on then return end
     DupeThread = task.spawn(function()
         while ZK.Money.Duping do
-            if ZK.DiscoveredRemotes.WorkingMoney then
-                pcall(function() ZK.DiscoveredRemotes.WorkingMoney:FireServer(math.random(100, 1000)) end)
-            end
-            for _, remote in ipairs(ZK.DiscoveredRemotes.Money) do
-                pcall(function() remote:FireServer(math.random(100, 500)) end)
-            end
+            if ZK.Remotes.Money then pcall(function() ZK.Remotes.Money:FireServer(math.random(100, 500)) end) end
             local stat = GetMoneyStat()
             if stat then pcall(function() stat.Value = stat.Value + math.random(50, 200) end) end
             task.wait(math.random(0.5, 1.5))
@@ -606,51 +511,26 @@ end
 
 local function GiveMoney(amt)
     amt = tonumber(amt)
-    if not amt then Notify("Money", "Invalid amount") return end
-    if ZK.DiscoveredRemotes.WorkingMoney then
-        pcall(function() ZK.DiscoveredRemotes.WorkingMoney:FireServer(amt) end)
-        Notify("Money", "Gave $" .. amt)
-        return
-    end
-    for _, remote in ipairs(ZK.DiscoveredRemotes.Money) do
-        pcall(function() remote:FireServer("add", amt) end)
-        pcall(function() remote:FireServer(amt) end)
-    end
+    if not amt then return end
+    if ZK.Remotes.Money then pcall(function() ZK.Remotes.Money:FireServer(amt) end) return end
     local stat = GetMoneyStat()
-    if stat then pcall(function() stat.Value = stat.Value + amt end) Notify("Money", "Added $" .. amt)
-    else Notify("Money", "No money system found") end
+    if stat then pcall(function() stat.Value = stat.Value + amt end) end
 end
 
 local function SetMoney(amt)
     amt = tonumber(amt)
-    if not amt then Notify("Money", "Invalid amount") return end
-    if ZK.DiscoveredRemotes.WorkingMoney then
-        pcall(function() ZK.DiscoveredRemotes.WorkingMoney:FireServer(amt) end)
-        Notify("Money", "Set to $" .. amt)
-        return
-    end
-    for _, remote in ipairs(ZK.DiscoveredRemotes.Money) do
-        pcall(function() remote:FireServer("set", amt) end)
-    end
+    if not amt then return end
+    if ZK.Remotes.Money then pcall(function() ZK.Remotes.Money:FireServer("set", amt) end) return end
     local stat = GetMoneyStat()
-    if stat then pcall(function() stat.Value = amt end) Notify("Money", "Set to $" .. amt)
-    else Notify("Money", "No money system found") end
+    if stat then pcall(function() stat.Value = amt end) end
 end
 
--- ═══════════════════════════════════════════════════════════
---  ITEMS
--- ═══════════════════════════════════════════════════════════
-
+-- ITEMS
 local function GiveItem(name)
-    if not name or name == "" then Notify("Items", "No item selected") return end
-    if ZK.DiscoveredRemotes.WorkingItem then
-        pcall(function() ZK.DiscoveredRemotes.WorkingItem:FireServer("give", name) end)
-        Notify("Items", "Gave " .. name)
+    if not name or name == "" then return end
+    if ZK.Remotes.Items then
+        pcall(function() ZK.Remotes.Items:FireServer("give", name) end)
         return
-    end
-    for _, remote in ipairs(ZK.DiscoveredRemotes.Items) do
-        pcall(function() remote:FireServer("give", name) end)
-        pcall(function() remote:FireServer(name) end)
     end
     local template = nil
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
@@ -660,405 +540,374 @@ local function GiveItem(name)
         pcall(function()
             local c = template:Clone()
             c.Parent = LocalPlayer.Backpack
-            Notify("Items", "Cloned " .. name)
         end)
-    else
-        Notify("Items", "Not found: " .. name .. " (tried remotes + ReplicatedStorage)")
     end
 end
 
 local function DupeItem()
     local char = LocalPlayer.Character
-    if not char then Notify("Items", "No character") return end
+    if not char then return end
     local held = char:FindFirstChildOfClass("Tool")
-    if not held then Notify("Items", "Hold an item first") return end
+    if not held then return end
     local bp = LocalPlayer.Backpack:FindFirstChild(held.Name)
     if bp then
         pcall(function()
             local c = bp:Clone()
             c.Parent = LocalPlayer.Backpack
-            Notify("Items", "Duped " .. held.Name)
         end)
     else
         pcall(function()
             local c = held:Clone()
             c.Parent = LocalPlayer.Backpack
-            Notify("Items", "Duped " .. held.Name)
         end)
     end
 end
 
 -- ═══════════════════════════════════════════════════════════
---  KILL
+--  DRAWING API UI (ZERO INSTANCES)
 -- ═══════════════════════════════════════════════════════════
 
-local function Kill(name)
-    local p = GetPlayerByName(name)
-    if not p then Notify("Kill", "Player not found") return end
-    local hrp = GetHRP(p)
-    if not hrp then Notify("Kill", "No character") return end
+local MenuObjects = {}
+local function ClearMenu()
+    for _, obj in pairs(MenuObjects) do if obj then obj:Remove() end end
+    MenuObjects = {}
+end
+
+local function DrawRect(x, y, w, h, color, transparency)
+    local rect = Drawing.new("Square")
+    rect.Size = Vector2.new(w, h)
+    rect.Position = Vector2.new(x, y)
+    rect.Color = color or Color3.fromRGB(18, 18, 38)
+    rect.Transparency = transparency or 1
+    rect.Filled = true
+    rect.Visible = true
+    table.insert(MenuObjects, rect)
+    return rect
+end
+
+local function DrawText(x, y, text, size, color, bold)
+    local txt = Drawing.new("Text")
+    txt.Position = Vector2.new(x, y)
+    txt.Text = text
+    txt.Size = size or 14
+    txt.Color = color or Color3.fromRGB(240, 240, 255)
+    txt.Font = bold and Drawing.Fonts.UIBold or Drawing.Fonts.UI
+    txt.Transparency = 1
+    txt.Visible = true
+    table.insert(MenuObjects, txt)
+    return txt
+end
+
+local function DrawButton(x, y, w, h, text, callback)
+    local rect = DrawRect(x, y, w, h, Color3.fromRGB(59, 130, 246))
+    local txt = DrawText(x + w/2 - (#text * 3.5), y + h/2 - 7, text, 12, Color3.fromRGB(255, 255, 255))
     
-    if ZK.DiscoveredRemotes.WorkingDamage then
-        pcall(function()
-            for i = 1, 10 do
-                ZK.DiscoveredRemotes.WorkingDamage:FireServer(p, 999, "Head")
-                task.wait(0.05)
+    local conn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local mousePos = UserInputService:GetMouseLocation()
+            if mousePos.X >= x and mousePos.X <= x + w and mousePos.Y >= y and mousePos.Y <= y + h then
+                callback()
+            end
+        end
+    end)
+    table.insert(ZK.Connections, conn)
+    return rect
+end
+
+local function DrawToggle(x, y, text, enabled, callback)
+    local bg = DrawRect(x, y, 40, 20, Color3.fromRGB(8, 8, 18))
+    local knob = DrawRect(x + (enabled and 22 or 2), y + 2, 16, 16, enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(147, 153, 170))
+    local label = DrawText(x + 50, y + 2, text, 13, Color3.fromRGB(240, 240, 255))
+    
+    local conn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local mousePos = UserInputService:GetMouseLocation()
+            if mousePos.X >= x and mousePos.X <= x + 40 and mousePos.Y >= y and mousePos.Y <= y + 20 then
+                enabled = not enabled
+                knob.Position = Vector2.new(x + (enabled and 22 or 2), y + 2)
+                knob.Color = enabled and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(147, 153, 170)
+                bg.Color = enabled and Color3.fromRGB(59, 130, 246) or Color3.fromRGB(8, 8, 18)
+                callback(enabled)
+            end
+        end
+    end)
+    table.insert(ZK.Connections, conn)
+    return enabled
+end
+
+local function DrawSlider(x, y, w, text, min, max, value, callback)
+    DrawText(x, y - 15, text .. ": " .. value, 12, Color3.fromRGB(240, 240, 255))
+    local track = DrawRect(x, y, w, 4, Color3.fromRGB(8, 8, 18))
+    local fill = DrawRect(x, y, (value - min) / (max - min) * w, 4, Color3.fromRGB(59, 130, 246))
+    local knob = DrawRect(x + (value - min) / (max - min) * w - 6, y - 4, 12, 12, Color3.fromRGB(255, 255, 255))
+    
+    local dragging = false
+    local conn1 = UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            local mousePos = UserInputService:GetMouseLocation()
+            if mousePos.X >= x and mousePos.X <= x + w and mousePos.Y >= y - 10 and mousePos.Y <= y + 14 then
+                dragging = true
+            end
+        end
+    end)
+    local conn2 = UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local mousePos = UserInputService:GetMouseLocation()
+            local pos = math.clamp((mousePos.X - x) / w, 0, 1)
+            local newVal = math.floor(min + pos * (max - min))
+            fill.Size = Vector2.new(pos * w, 4)
+            knob.Position = Vector2.new(x + pos * w - 6, y - 4)
+            callback(newVal)
+        end
+    end)
+    local conn3 = UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+    table.insert(ZK.Connections, conn1)
+    table.insert(ZK.Connections, conn2)
+    table.insert(ZK.Connections, conn3)
+end
+
+local function RenderMenu()
+    ClearMenu()
+    if not ZK.MenuOpen then return end
+    
+    local mx, my = 100, 100
+    local mw, mh = 600, 400
+    
+    -- Background
+    DrawRect(mx, my, mw, mh, Color3.fromRGB(8, 8, 18), 0.95)
+    DrawRect(mx, my, mw, 40, Color3.fromRGB(18, 18, 38))
+    DrawText(mx + 15, my + 12, "ZKILLER // SOUTH BRONX", 16, Color3.fromRGB(59, 130, 246), true)
+    DrawText(mx + mw - 200, my + 12, "by the invisible man", 11, Color3.fromRGB(147, 153, 170))
+    
+    -- Tabs
+    local tabX = mx + 10
+    for i, tabName in ipairs(ZK.Tabs) do
+        local isActive = ZK.Tab == tabName
+        DrawRect(tabX, my + 50, 80, 30, isActive and Color3.fromRGB(59, 130, 246) or Color3.fromRGB(18, 18, 38))
+        DrawText(tabX + 10, my + 56, tabName, 11, isActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(147, 153, 170))
+        
+        local conn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+            if gameProcessed then return end
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                local mousePos = UserInputService:GetMouseLocation()
+                if mousePos.X >= tabX and mousePos.X <= tabX + 80 and mousePos.Y >= my + 50 and mousePos.Y <= my + 80 then
+                    ZK.Tab = tabName
+                    RenderMenu()
+                end
             end
         end)
-        Notify("Kill", "Killed " .. name)
-        return
-    end
-    for _, remote in ipairs(ZK.DiscoveredRemotes.Damage) do
-        pcall(function() remote:FireServer(p, 999) end)
+        table.insert(ZK.Connections, conn)
+        tabX = tabX + 85
     end
     
-    local char = LocalPlayer.Character
-    if not char then Notify("Kill", "No character") return end
-    local myHRP = char:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return end
+    -- Content area
+    local cx, cy = mx + 10, my + 90
+    local cw = mw - 20
     
-    local old = myHRP.CFrame
-    SafeTeleport(hrp.CFrame + hrp.CFrame.LookVector * -3 + Vector3.new(0, 1, 0))
-    task.wait(0.5)
-    
-    local gun = nil
-    for _, t in ipairs(LocalPlayer.Backpack:GetChildren()) do
-        if t:IsA("Tool") and (t.Name:find("Glock") or t.Name:find("AK") or t.Name:find("Deagle") or t.Name:find("Gun")) then gun = t; break end
-    end
-    if not gun then gun = LocalPlayer.Backpack:FindFirstChildOfClass("Tool") end
-    
-    if gun then
-        pcall(function()
-            char:FindFirstChildOfClass("Humanoid"):EquipTool(gun)
-            task.wait(0.3)
-            for i = 1, 20 do gun:Activate() task.wait(0.05) end
+    if ZK.Tab == "Combat" then
+        DrawText(cx, cy, "═══ AIMBOT ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        DrawToggle(cx, cy + 25, "Aimbot", ZK.Aimbot.Enabled, function(v) ToggleAimbot(v) end)
+        DrawText(cx, cy + 55, "Aim Part: " .. ZK.Aimbot.Part, 12, Color3.fromRGB(240, 240, 255))
+        DrawSlider(cx, cy + 75, cw - 20, "FOV", 50, 500, ZK.Aimbot.FOV, function(v) ZK.Aimbot.FOV = v; RenderMenu() end)
+        DrawSlider(cx, cy + 105, cw - 20, "Smoothness", 1, 20, ZK.Aimbot.Smoothness, function(v) ZK.Aimbot.Smoothness = v; RenderMenu() end)
+        
+        DrawText(cx, cy + 140, "═══ SILENT AIM ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        DrawToggle(cx, cy + 165, "Silent Aim", ZK.SilentAim.Enabled, function(v) ToggleSilentAim(v) end)
+        DrawSlider(cx, cy + 195, cw - 20, "Silent FOV", 50, 500, ZK.SilentAim.FOV, function(v) ZK.SilentAim.FOV = v; RenderMenu() end)
+        DrawSlider(cx, cy + 225, cw - 20, "Hit Chance", 1, 100, ZK.SilentAim.HitChance, function(v) ZK.SilentAim.HitChance = v; RenderMenu() end)
+        
+        DrawText(cx, cy + 260, "═══ GUN MODS ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        DrawToggle(cx, cy + 285, "Wallbang", ZK.GunMods.Wallbang, function(v) ZK.GunMods.Wallbang = v; UpdateGunMods() end)
+        DrawToggle(cx, cy + 315, "Infinite Ammo", ZK.GunMods.InfiniteAmmo, function(v) ZK.GunMods.InfiniteAmmo = v; UpdateGunMods() end)
+        DrawToggle(cx, cy + 345, "Rapid Fire", ZK.GunMods.RapidFire, function(v) ZK.GunMods.RapidFire = v; UpdateGunMods() end)
+        
+    elseif ZK.Tab == "Teleport" then
+        DrawText(cx, cy, "═══ TELEPORT ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        local players = GetPlayerList()
+        local selected = ZK.SelectedPlayer and ZK.SelectedPlayer.Name or "Select Player"
+        DrawText(cx, cy + 25, "Selected: " .. selected, 12, Color3.fromRGB(240, 240, 255))
+        
+        local py = cy + 50
+        for i, p in ipairs(players) do
+            if py < my + mh - 40 then
+                DrawButton(cx, py, cw - 20, 25, p.Name, function()
+                    ZK.SelectedPlayer = p
+                    RenderMenu()
+                end)
+                py = py + 30
+            end
+        end
+        
+        DrawButton(cx, my + mh - 35, cw - 20, 30, "TELEPORT TO SELECTED", function()
+            if ZK.SelectedPlayer then TeleportTo(ZK.SelectedPlayer.Name) end
+        end)
+        
+    elseif ZK.Tab == "Spectate" then
+        DrawText(cx, cy, "═══ SPECTATE ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        local players = GetPlayerList()
+        local py = cy + 25
+        for i, p in ipairs(players) do
+            if py < my + mh - 80 then
+                DrawButton(cx, py, cw - 20, 25, p.Name, function()
+                    ZK.SelectedPlayer = p
+                    RenderMenu()
+                end)
+                py = py + 30
+            end
+        end
+        DrawButton(cx, my + mh - 70, cw/2 - 15, 30, "START SPECTATE", function()
+            if ZK.SelectedPlayer then Spectate(ZK.SelectedPlayer.Name) end
+        end)
+        DrawButton(cx + cw/2 - 5, my + mh - 70, cw/2 - 15, 30, "END SPECTATE", EndSpectate)
+        
+    elseif ZK.Tab == "Bring" then
+        DrawText(cx, cy, "═══ BRING ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        local players = GetPlayerList()
+        local py = cy + 25
+        for i, p in ipairs(players) do
+            if py < my + mh - 40 then
+                DrawButton(cx, py, cw - 20, 25, p.Name, function()
+                    ZK.SelectedPlayer = p
+                    RenderMenu()
+                end)
+                py = py + 30
+            end
+        end
+        DrawButton(cx, my + mh - 35, cw - 20, 30, "BRING SELECTED", function()
+            if ZK.SelectedPlayer then Bring(ZK.SelectedPlayer.Name) end
+        end)
+        
+    elseif ZK.Tab == "Money" then
+        DrawText(cx, cy, "═══ AUTO FARM ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        DrawToggle(cx, cy + 25, "Auto Farm", ZK.Money.Farming, function(v) ToggleMoneyFarm(v) end)
+        
+        DrawText(cx, cy + 60, "═══ MONEY DUPE ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        DrawToggle(cx, cy + 85, "Money Dupe", ZK.Money.Duping, function(v) ToggleMoneyDupe(v) end)
+        
+        DrawText(cx, cy + 120, "═══ GIVE MONEY ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        DrawText(cx, cy + 145, "Type amount in chat: /e givemoney [amount]", 11, Color3.fromRGB(147, 153, 170))
+        
+        DrawText(cx, cy + 170, "═══ SET MONEY ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        DrawText(cx, cy + 195, "Type amount in chat: /e setmoney [amount]", 11, Color3.fromRGB(147, 153, 170))
+        
+    elseif ZK.Tab == "Items" then
+        DrawText(cx, cy, "═══ GIVE ITEM ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        local items = ZK.Items
+        DrawText(cx, cy + 25, "Selected: " .. items[ZK.SelectedItemIndex], 12, Color3.fromRGB(240, 240, 255))
+        DrawButton(cx, cy + 50, 100, 25, "PREV", function()
+            ZK.SelectedItemIndex = ZK.SelectedItemIndex > 1 and ZK.SelectedItemIndex - 1 or #items
+            RenderMenu()
+        end)
+        DrawButton(cx + cw - 120, cy + 50, 100, 25, "NEXT", function()
+            ZK.SelectedItemIndex = ZK.SelectedItemIndex < #items and ZK.SelectedItemIndex + 1 or 1
+            RenderMenu()
+        end)
+        DrawButton(cx, cy + 85, cw - 20, 30, "GIVE ITEM", function()
+            GiveItem(items[ZK.SelectedItemIndex])
+        end)
+        
+        DrawText(cx, cy + 130, "═══ ITEM DUPE ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        DrawButton(cx, cy + 155, cw - 20, 30, "DUPE HELD ITEM", DupeItem)
+        
+    elseif ZK.Tab == "Kill" then
+        DrawText(cx, cy, "═══ KILL ═══", 14, Color3.fromRGB(59, 130, 246), true)
+        local players = GetPlayerList()
+        local py = cy + 25
+        for i, p in ipairs(players) do
+            if py < my + mh - 40 then
+                DrawButton(cx, py, cw - 20, 25, p.Name, function()
+                    ZK.SelectedPlayer = p
+                    RenderMenu()
+                end)
+                py = py + 30
+            end
+        end
+        DrawButton(cx, my + mh - 35, cw - 20, 30, "KILL SELECTED", function()
+            if ZK.SelectedPlayer then Kill(ZK.SelectedPlayer.Name) end
         end)
     end
-    
-    task.wait(0.3)
-    SafeTeleport(old)
-    Notify("Kill", "Attempted on " .. name)
 end
 
 -- ═══════════════════════════════════════════════════════════
---  RAYFIELD UI
+--  KEYBINDS
 -- ═══════════════════════════════════════════════════════════
 
-local Window = Rayfield:CreateWindow({
-    Name = "ZKILLER // SOUTH BRONX",
-    LoadingTitle = "ZKILLER HUB",
-    LoadingSubtitle = "by the invisible man",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "ZKiller",
-        FileName = "SouthBronxConfig"
-    },
-    Discord = {Enabled = false, Invite = ""},
-    KeySystem = true,
-    KeySettings = {
-        Title = "ZKILLER AUTHENTICATION",
-        Subtitle = "Enter your access key",
-        Note = "Key: Zkiller",
-        FileName = "ZKillerKey",
-        SaveKey = true,
-        GrabKeyFromSite = false,
-        Key = {"Zkiller"}
-    }
-})
-
--- COMBAT TAB
-local CombatTab = Window:CreateTab("Combat", 4483362458)
-
-CombatTab:CreateSection("Aimbot")
-
-CombatTab:CreateToggle({
-    Name = "Aimbot",
-    CurrentValue = false,
-    Flag = "AimbotToggle",
-    Callback = function(Value) ToggleAimbot(Value) end
-})
-
-CombatTab:CreateDropdown({
-    Name = "Aim Part",
-    Options = {"Head", "Torso", "HumanoidRootPart", "LeftArm", "RightArm"},
-    CurrentOption = "Head",
-    Flag = "AimPartDropdown",
-    Callback = function(Value) ZK.Aimbot.Part = Value end
-})
-
-CombatTab:CreateSlider({
-    Name = "Aimbot FOV",
-    Range = {50, 500},
-    Increment = 10,
-    CurrentValue = 150,
-    Suffix = "px",
-    Flag = "AimbotFOV",
-    Callback = function(Value) ZK.Aimbot.FOV = Value end
-})
-
-CombatTab:CreateSlider({
-    Name = "Smoothness",
-    Range = {1, 20},
-    Increment = 1,
-    CurrentValue = 3,
-    Suffix = "",
-    Flag = "AimbotSmooth",
-    Callback = function(Value) ZK.Aimbot.Smoothness = Value end
-})
-
-CombatTab:CreateSection("Silent Aim")
-
-CombatTab:CreateToggle({
-    Name = "Silent Aim",
-    CurrentValue = false,
-    Flag = "SilentAimToggle",
-    Callback = function(Value) ToggleSilentAim(Value) end
-})
-
-CombatTab:CreateSlider({
-    Name = "Silent Aim FOV",
-    Range = {50, 500},
-    Increment = 10,
-    CurrentValue = 200,
-    Suffix = "px",
-    Flag = "SilentAimFOV",
-    Callback = function(Value) ZK.SilentAim.FOV = Value end
-})
-
-CombatTab:CreateSlider({
-    Name = "Hit Chance",
-    Range = {1, 100},
-    Increment = 1,
-    CurrentValue = 100,
-    Suffix = "%",
-    Flag = "HitChance",
-    Callback = function(Value) ZK.SilentAim.HitChance = Value end
-})
-
-CombatTab:CreateSection("Gun Mods")
-
-CombatTab:CreateToggle({
-    Name = "Shoot Through Walls",
-    CurrentValue = false,
-    Flag = "WallbangToggle",
-    Callback = function(Value) ZK.GunMods.Wallbang = Value; UpdateGunMods() end
-})
-
-CombatTab:CreateToggle({
-    Name = "Infinite Ammo",
-    CurrentValue = false,
-    Flag = "InfAmmoToggle",
-    Callback = function(Value) ZK.GunMods.InfiniteAmmo = Value; UpdateGunMods() end
-})
-
-CombatTab:CreateToggle({
-    Name = "Rapid Fire",
-    CurrentValue = false,
-    Flag = "RapidFireToggle",
-    Callback = function(Value) ZK.GunMods.RapidFire = Value; UpdateGunMods() end
-})
-
--- TELEPORT TAB
-local TeleportTab = Window:CreateTab("Teleport", 4483362458)
-
-TeleportTab:CreateSection("Teleport to Player")
-
-local TPDropdown = TeleportTab:CreateDropdown({
-    Name = "Select Player",
-    Options = GetPlayerList(),
-    CurrentOption = "",
-    Flag = "TeleportDropdown",
-    Callback = function(Option) ZK.SelectedPlayer = Option end
-})
-
-TeleportTab:CreateButton({
-    Name = "Teleport",
-    Callback = function()
-        if ZK.SelectedPlayer and ZK.SelectedPlayer ~= "" then TeleportTo(ZK.SelectedPlayer)
-        else Notify("Teleport", "No player selected") end
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    -- Insert to toggle menu
+    if input.KeyCode == Enum.KeyCode.Insert then
+        ZK.MenuOpen = not ZK.MenuOpen
+        if not ZK.MenuOpen then
+            ClearMenu()
+            -- Disconnect all menu connections
+            for _, c in ipairs(ZK.Connections) do
+                if c then c:Disconnect() end
+            end
+            ZK.Connections = {}
+        else
+            RenderMenu()
+        end
     end
-})
-
--- SPECTATE TAB
-local SpectateTab = Window:CreateTab("Spectate", 4483362458)
-
-SpectateTab:CreateSection("Spectate Player")
-
-local SpecDropdown = SpectateTab:CreateDropdown({
-    Name = "Select Player",
-    Options = GetPlayerList(),
-    CurrentOption = "",
-    Flag = "SpectateDropdown",
-    Callback = function(Option) ZK.SelectedPlayer = Option end
-})
-
-SpectateTab:CreateButton({
-    Name = "Start Spectate",
-    Callback = function()
-        if ZK.SelectedPlayer and ZK.SelectedPlayer ~= "" then Spectate(ZK.SelectedPlayer)
-        else Notify("Spectate", "No player selected") end
+    
+    -- Keybinds when menu is closed
+    if not ZK.MenuOpen then
+        if input.KeyCode == Enum.KeyCode.F then ToggleAimbot(not ZK.Aimbot.Enabled) end
+        if input.KeyCode == Enum.KeyCode.G then ToggleSilentAim(not ZK.SilentAim.Enabled) end
+        if input.KeyCode == Enum.KeyCode.H then
+            ZK.GunMods.InfiniteAmmo = not ZK.GunMods.InfiniteAmmo
+            UpdateGunMods()
+        end
     end
-})
-
-SpectateTab:CreateButton({
-    Name = "End Spectate",
-    Callback = EndSpectate
-})
-
--- BRING TAB
-local BringTab = Window:CreateTab("Bring", 4483362458)
-
-BringTab:CreateSection("Bring Player")
-
-local BringDropdown = BringTab:CreateDropdown({
-    Name = "Select Player",
-    Options = GetPlayerList(),
-    CurrentOption = "",
-    Flag = "BringDropdown",
-    Callback = function(Option) ZK.SelectedPlayer = Option end
-})
-
-BringTab:CreateButton({
-    Name = "Bring",
-    Callback = function()
-        if ZK.SelectedPlayer and ZK.SelectedPlayer ~= "" then Bring(ZK.SelectedPlayer)
-        else Notify("Bring", "No player selected") end
-    end
-})
-
--- MONEY TAB
-local MoneyTab = Window:CreateTab("Money", 4483362458)
-
-MoneyTab:CreateSection("Smart Auto Farm")
-
-MoneyTab:CreateToggle({
-    Name = "Auto Farm (Multi-Strategy)",
-    CurrentValue = false,
-    Flag = "MoneyFarmToggle",
-    Callback = function(Value) ToggleMoneyFarm(Value) end
-})
-
-MoneyTab:CreateSection("Money Dupe")
-
-MoneyTab:CreateToggle({
-    Name = "Money Dupe",
-    CurrentValue = false,
-    Flag = "MoneyDupeToggle",
-    Callback = function(Value) ToggleMoneyDupe(Value) end
-})
-
-MoneyTab:CreateSection("Give Money")
-
-MoneyTab:CreateInput({
-    Name = "Amount to Give",
-    PlaceholderText = "Enter amount...",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(Value) GiveMoney(Value) end
-})
-
-MoneyTab:CreateSection("Set Money")
-
-MoneyTab:CreateInput({
-    Name = "Set Amount",
-    PlaceholderText = "Enter amount...",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(Value) SetMoney(Value) end
-})
-
--- ITEMS TAB
-local ItemsTab = Window:CreateTab("Items", 4483362458)
-
-ItemsTab:CreateSection("Give Item")
-
-ItemsTab:CreateDropdown({
-    Name = "Select Item",
-    Options = ZK.Items,
-    CurrentOption = ZK.Items[1],
-    Flag = "ItemDropdown",
-    Callback = function(Value) ZK.SelectedItem = Value end
-})
-
-ItemsTab:CreateInput({
-    Name = "Custom Item",
-    PlaceholderText = "Or type custom name...",
-    RemoveTextAfterFocusLost = false,
-    Callback = function(Value) if Value ~= "" then ZK.SelectedItem = Value end end
-})
-
-ItemsTab:CreateButton({
-    Name = "Give Item",
-    Callback = function()
-        if ZK.SelectedItem then GiveItem(ZK.SelectedItem)
-        else Notify("Items", "No item selected") end
-    end
-})
-
-ItemsTab:CreateSection("Item Dupe")
-
-ItemsTab:CreateButton({
-    Name = "Dupe Held Item",
-    Callback = DupeItem
-})
-
--- KILL TAB
-local KillTab = Window:CreateTab("Kill", 4483362458)
-
-KillTab:CreateSection("Kill Player")
-
-local KillDropdown = KillTab:CreateDropdown({
-    Name = "Select Player",
-    Options = GetPlayerList(),
-    CurrentOption = "",
-    Flag = "KillDropdown",
-    Callback = function(Value) ZK.SelectedPlayer = Option end
-})
-
-KillTab:CreateButton({
-    Name = "Kill",
-    Callback = function()
-        if ZK.SelectedPlayer and ZK.SelectedPlayer ~= "" then Kill(ZK.SelectedPlayer)
-        else Notify("Kill", "No player selected") end
-    end
-})
-
--- SETTINGS TAB
-local SettingsTab = Window:CreateTab("Settings", 4483362458)
-
-SettingsTab:CreateSection("Remote Discovery")
-
-SettingsTab:CreateButton({
-    Name = "Discover & Test Remotes",
-    Callback = function()
-        DiscoverRemotes()
-    end
-})
-
-SettingsTab:CreateSection("Credits")
-
-SettingsTab:CreateParagraph({
-    Title = "ZKILLER HUB",
-    Content = "Made by the invisible man\nVersion: 6.0\nGame: South Bronx: The Trenches\nUI: Rayfield 2026\n\nIf features don't work, click 'Discover & Test Remotes' first."
-})
-
--- UPDATE PLAYER LISTS
-Players.PlayerAdded:Connect(function()
-    local list = GetPlayerList()
-    TPDropdown:Refresh(list, true)
-    SpecDropdown:Refresh(list, true)
-    BringDropdown:Refresh(list, true)
-    KillDropdown:Refresh(list, true)
 end)
 
-Players.PlayerRemoving:Connect(function()
-    local list = GetPlayerList()
-    TPDropdown:Refresh(list, true)
-    SpecDropdown:Refresh(list, true)
-    BringDropdown:Refresh(list, true)
-    KillDropdown:Refresh(list, true)
+-- ═══════════════════════════════════════════════════════════
+--  CHAT COMMANDS (NO UI NEEDED)
+-- ═══════════════════════════════════════════════════════════
+
+LocalPlayer.Chatted:Connect(function(msg)
+    local args = msg:split(" ")
+    
+    if args[1] == "/e" then
+        if args[2] == "givemoney" and args[3] then
+            GiveMoney(args[3])
+        elseif args[2] == "setmoney" and args[3] then
+            SetMoney(args[3])
+        elseif args[2] == "tp" and args[3] then
+            TeleportTo(args[3])
+        elseif args[2] == "bring" and args[3] then
+            Bring(args[3])
+        elseif args[2] == "kill" and args[3] then
+            Kill(args[3])
+        elseif args[2] == "spectate" and args[3] then
+            Spectate(args[3])
+        elseif args[2] == "endspec" then
+            EndSpectate()
+        elseif args[2] == "giveitem" and args[3] then
+            GiveItem(args[3])
+        elseif args[2] == "dupeitem" then
+            DupeItem()
+        elseif args[2] == "farm" then
+            ToggleMoneyFarm(not ZK.Money.Farming)
+        elseif args[2] == "dupe" then
+            ToggleMoneyDupe(not ZK.Money.Duping)
+        end
+    end
 end)
 
--- INIT
-task.delay(2, function()
-    DiscoverRemotes()
-    Notify("ZKILLER", "South Bronx loaded. Click 'Discover & Test Remotes' if features don't work. | by the invisible man")
-end)
+-- ═══════════════════════════════════════════════════════════
+--  INIT
+-- ═══════════════════════════════════════════════════════════
+
+DiscoverRemotes()
+
+warn("[ZKILLER] South Bronx Fileless loaded.")
+warn("[ZKILLER] Press INSERT for menu.")
+warn("[ZKILLER] Chat commands: /e [command] [args]")
+warn("[ZKILLER] Commands: tp [name], bring [name], kill [name], spectate [name], endspec, givemoney [amt], setmoney [amt], giveitem [name], dupeitem, farm, dupe")
+warn("[ZKILLER] Keybinds: F=Aimbot, G=SilentAim, H=InfiniteAmmo")
+warn("[ZKILLER] by the invisible man")

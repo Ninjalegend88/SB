@@ -1,57 +1,42 @@
 -- ═══════════════════════════════════════════════════════════
---  ZKILLER // SOUTH BRONX STEALTH EDITION
+--  ZKILLER // SOUTH BRONX: THE TRENCHES
 --  by the invisible man
 --  Key: Zkiller
---  Bypasses: File Integrity Check, Script Injection Detection
+--  PlaceId: 10179538382
+--  Rayfield 2026 Edition
 -- ═══════════════════════════════════════════════════════════
 
--- DELAYED INITIALIZATION — Let AC initialize first
-task.wait(8)
-
 -- ═══════════════════════════════════════════════════════════
---  STEALTH LAYER — Clean traces before loading
+--  LOAD RAYFIELD 2026 (WITH FALLBACKS)
 -- ═══════════════════════════════════════════════════════════
 
--- Disable ScriptContext error reporters (common AC vector)
-pcall(function()
-    for _, conn in ipairs(getconnections(game:GetService("ScriptContext").Error)) do
-        conn:Disable()
+local RayfieldSources = {
+    'https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua',
+    'https://raw.githubusercontent.com/jensonhirst/Rayfield/main/source.lua',
+    'https://raw.githubusercontent.com/shlexware/Rayfield/main/source.lua',
+    'https://sirius.menu/rayfield'
+}
+
+local Rayfield = nil
+for _, url in ipairs(RayfieldSources) do
+    local success, result = pcall(function()
+        return loadstring(game:HttpGet(url))()
+    end)
+    if success and result then
+        Rayfield = result
+        break
     end
-end)
-
--- Clean getgc of foreign closures that match our patterns
-pcall(function()
-    for _, v in ipairs(getgc()) do
-        if type(v) == "function" and islclosure(v) then
-            local info = debug.getinfo(v)
-            if info and info.source and (info.source:find("ZKILLER") or info.source:find("Rayfield") or info.source:find("Orion")) then
-                -- Can't remove from gc, but we can obfuscate source
-            end
-        end
-    end
-end)
-
--- Spoof loadstring origin
-local _loadstring = loadstring
-loadstring = function(src)
-    return _loadstring(src, "=ZK")
 end
 
--- ═══════════════════════════════════════════════════════════
---  LOAD ORION (LIGHTER FOOTPRINT THAN RAYFIELD)
--- ═══════════════════════════════════════════════════════════
-
-local OrionLoadSuccess, Orion = pcall(function()
-    return loadstring(game:HttpGet('https://raw.githubusercontent.com/shlexware/Orion/main/source'))()
-end)
-
-if not OrionLoadSuccess then
-    warn("[ZKILLER] Orion failed, trying backup...")
-    OrionLoadSuccess, Orion = pcall(function()
-        return loadstring(game:HttpGet('https://pastebin.com/raw/xLRUSLxK'))()
+if not Rayfield then
+    -- Final fallback: try to load from a known pastebin mirror
+    local pbSuccess, pbResult = pcall(function()
+        return loadstring(game:HttpGet('https://pastebin.com/raw/2UWky3wU'))()
     end)
-    if not OrionLoadSuccess then
-        error("[ZKILLER] Could not load UI library.")
+    if pbSuccess and pbResult then
+        Rayfield = pbResult
+    else
+        game:GetService("Players").LocalPlayer:Kick("[ZKILLER] Failed to load Rayfield UI. Update your executor or check internet connection.")
         return
     end
 end
@@ -67,10 +52,56 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 local VirtualUser = game:GetService("VirtualUser")
+local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
+
+-- ═══════════════════════════════════════════════════════════
+--  ANTI-CHEAT BYPASS (EXECUTE BEFORE ANYTHING ELSE)
+-- ═══════════════════════════════════════════════════════════
+
+pcall(function()
+    -- Disable ScriptContext error reporters
+    for _, conn in ipairs(getconnections(game:GetService("ScriptContext").Error)) do
+        conn:Disable()
+    end
+end)
+
+pcall(function()
+    -- Hook kick to prevent AC kicks
+    local oldKick = hookfunction(LocalPlayer.Kick, function(self, ...)
+        if self == LocalPlayer then
+            warn("[ZKILLER] Blocked kick attempt")
+            return
+        end
+        return oldKick(self, ...)
+    end)
+end)
+
+pcall(function()
+    -- Spoof memory stats
+    local stats = game:GetService("Stats")
+    hookfunction(stats.GetTotalMemoryUsageMb, function()
+        return math.random(800, 1200)
+    end)
+end)
+
+-- Neutralize AC scripts periodically
+task.spawn(function()
+    while true do
+        for _, obj in ipairs(game:GetDescendants()) do
+            if obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
+                local name = obj.Name:lower()
+                if name:find("anticheat") or name:find("anti-cheat") or name:find("ac_") or name:find("detect") or name:find("ban") or name:find("exploit") or name:find("cheat") or name:find("integrity") or name:find("filecheck") then
+                    pcall(function() obj.Disabled = true end)
+                end
+            end
+        end
+        task.wait(3)
+    end
+end)
 
 -- ═══════════════════════════════════════════════════════════
 --  STATE
@@ -88,14 +119,15 @@ local ZK = {
         "Glock17", "Glock18", "DesertEagle", "BerettaM9", "AK47", "AR15",
         "MP5", "Uzi", "Mac10", "PumpShotgun", "SawedOff", "Knife",
         "BaseballBat", "Crowbar", "BrassKnuckles", "Phone", "Wallet",
-        "Key", "Bandage", "Burger", "Pizza", "Soda", "Water"
+        "Key", "Bandage", "Burger", "Pizza", "Soda", "Water", "Weed",
+        "Cocaine", "Meth", "Armor", "Medkit", "Lockpick"
     },
     Remotes = {Money = nil, Damage = nil, Items = nil, Jobs = nil},
     DrawingObjects = {}
 }
 
 -- ═══════════════════════════════════════════════════════════
---  DRAWING API HELPERS (ZERO INSTANCE CREATION)
+--  DRAWING API HELPERS
 -- ═══════════════════════════════════════════════════════════
 
 local function NewDrawing(type, props)
@@ -106,23 +138,16 @@ local function NewDrawing(type, props)
     return obj
 end
 
-local function ClearDrawings()
-    for _, obj in pairs(ZK.DrawingObjects) do
-        if obj then obj:Remove() end
-    end
-    ZK.DrawingObjects = {}
-end
-
 -- ═══════════════════════════════════════════════════════════
 --  UTILITY
 -- ═══════════════════════════════════════════════════════════
 
 local function Notify(title, message)
-    Orion:MakeNotification({
-        Name = title,
+    Rayfield:Notify({
+        Title = title,
         Content = message,
-        Image = "rbxassetid://4483345998",
-        Time = 4
+        Duration = 4,
+        Image = 4483362458
     })
 end
 
@@ -184,13 +209,13 @@ local function ScanRemotes()
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
             local name = obj.Name:lower()
-            if name:find("money") or name:find("cash") or name:find("pay") then
+            if name:find("money") or name:find("cash") or name:find("pay") or name:find("bank") then
                 ZK.Remotes.Money = obj
-            elseif name:find("damage") or name:find("hit") or name:find("shoot") then
+            elseif name:find("damage") or name:find("hit") or name:find("shoot") or name:find("fire") then
                 ZK.Remotes.Damage = obj
-            elseif name:find("item") or name:find("tool") or name:find("weapon") then
+            elseif name:find("item") or name:find("tool") or name:find("weapon") or name:find("inventory") then
                 ZK.Remotes.Items = obj
-            elseif name:find("job") or name:find("work") or name:find("construction") then
+            elseif name:find("job") or name:find("work") or name:find("construction") or name:find("task") then
                 ZK.Remotes.Jobs = obj
             end
         end
@@ -198,7 +223,7 @@ local function ScanRemotes()
 end
 
 -- ═══════════════════════════════════════════════════════════
---  AIMBOT & SILENT AIM (DRAWING API — NO INSTANCES)
+--  AIMBOT & SILENT AIM
 -- ═══════════════════════════════════════════════════════════
 
 local function GetClosestPlayer(fov, targetPart)
@@ -275,32 +300,32 @@ local function ToggleSilentAim(enabled)
     })
     table.insert(ZK.DrawingObjects, SilentFOVCircle)
     
-    -- Metatable proxy for raycast (stealthier than hookfunction)
-    local mt = getrawmetatable(Workspace)
-    local oldIndex = mt.__index
-    local oldNamecall = mt.__namecall
-    
-    setreadonly(mt, false)
-    
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if method == "Raycast" and ZK.SilentAim.Enabled and math.random(1, 100) <= ZK.SilentAim.HitChance then
-            local target = GetClosestPlayer(ZK.SilentAim.FOV, "Head")
-            if target then
-                local args = {...}
-                local origin = args[1]
-                local newDir = (target.Position - origin).Unit * args[2].Magnitude
-                args[2] = newDir
-                if ZK.GunMods.Wallbang and args[3] then
-                    args[3].FilterType = Enum.RaycastFilterType.Blacklist
+    -- Metatable proxy for silent aim
+    pcall(function()
+        local mt = getrawmetatable(Workspace)
+        local oldNamecall = mt.__namecall
+        setreadonly(mt, false)
+        
+        mt.__namecall = newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+            if method == "Raycast" and ZK.SilentAim.Enabled and math.random(1, 100) <= ZK.SilentAim.HitChance then
+                local target = GetClosestPlayer(ZK.SilentAim.FOV, "Head")
+                if target then
+                    local args = {...}
+                    local origin = args[1]
+                    local newDir = (target.Position - origin).Unit * args[2].Magnitude
+                    args[2] = newDir
+                    if ZK.GunMods.Wallbang and args[3] then
+                        args[3].FilterType = Enum.RaycastFilterType.Blacklist
+                    end
+                    return oldNamecall(self, unpack(args))
                 end
-                return oldNamecall(self, unpack(args))
             end
-        end
-        return oldNamecall(self, ...)
+            return oldNamecall(self, ...)
+        end)
+        
+        setreadonly(mt, true)
     end)
-    
-    setreadonly(mt, true)
     
     SilentAimConnection = RunService.RenderStepped:Connect(function()
         if SilentFOVCircle then
@@ -328,7 +353,7 @@ local function ToggleGunMods()
         for _, tool in ipairs(char:GetChildren()) do
             if tool:IsA("Tool") then
                 if ZK.GunMods.InfiniteAmmo then
-                    for _, name in ipairs({"Ammo", "Clip", "Bullets", "CurrentAmmo"}) do
+                    for _, name in ipairs({"Ammo", "Clip", "Bullets", "CurrentAmmo", "AmmoCount"}) do
                         local val = tool:FindFirstChild(name)
                         if val and (val:IsA("IntValue") or val:IsA("NumberValue")) then
                             val.Value = 999
@@ -336,14 +361,14 @@ local function ToggleGunMods()
                     end
                 end
                 if ZK.GunMods.RapidFire then
-                    for _, name in ipairs({"FireRate", "Cooldown", "ShootCooldown", "RPM"}) do
+                    for _, name in ipairs({"FireRate", "Cooldown", "ShootCooldown", "RPM", "ReloadTime"}) do
                         local val = tool:FindFirstChild(name)
                         if val and (val:IsA("NumberValue") or val:IsA("IntValue")) then
                             val.Value = 0.01
                         end
                     end
                 end
-                local reloading = tool:FindFirstChild("Reloading") or tool:FindFirstChild("IsReloading")
+                local reloading = tool:FindFirstChild("Reloading") or tool:FindFirstChild("IsReloading") or tool:FindFirstChild("reloading")
                 if reloading and reloading:IsA("BoolValue") then
                     reloading.Value = false
                 end
@@ -352,7 +377,7 @@ local function ToggleGunMods()
         
         for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
             if tool:IsA("Tool") and ZK.GunMods.InfiniteAmmo then
-                for _, name in ipairs({"Ammo", "Clip", "Bullets"}) do
+                for _, name in ipairs({"Ammo", "Clip", "Bullets", "CurrentAmmo"}) do
                     local val = tool:FindFirstChild(name)
                     if val and val:IsA("IntValue") then val.Value = 999 end
                 end
@@ -445,11 +470,22 @@ local function ToggleMoneyFarm(enabled)
                     if not ZK.Money.Farming then break end
                     if obj:IsA("ProximityPrompt") then
                         local pn = obj.Parent and obj.Parent.Name:lower() or ""
-                        if pn:find("construction") or pn:find("job") or pn:find("work") then
+                        if pn:find("construction") or pn:find("job") or pn:find("work") or pn:find("boss") or pn:find("site") then
                             if (hrp.Position - obj.Parent.Position).Magnitude < 50 then
                                 SafeTeleport(obj.Parent.CFrame + Vector3.new(0, 3, 0))
                                 task.wait(1.5)
                                 fireproximityprompt(obj)
+                                task.wait(2)
+                            end
+                        end
+                    end
+                    if obj:IsA("ClickDetector") then
+                        local pn = obj.Parent and obj.Parent.Name:lower() or ""
+                        if pn:find("construction") or pn:find("job") or pn:find("work") then
+                            if (hrp.Position - obj.Parent.Position).Magnitude < 50 then
+                                SafeTeleport(obj.Parent.CFrame + Vector3.new(0, 3, 0))
+                                task.wait(1.5)
+                                fireclickdetector(obj)
                                 task.wait(2)
                             end
                         end
@@ -495,8 +531,12 @@ local function GiveMoney(amount)
         return
     end
     local stat = GetMoneyStat()
-    if stat then pcall(function() stat.Value = stat.Value + amount end) Notify("Money", "Added $" .. amount)
-    else Notify("Money", "No money system found") end
+    if stat then
+        pcall(function() stat.Value = stat.Value + amount end)
+        Notify("Money", "Added $" .. amount)
+    else
+        Notify("Money", "No money system found")
+    end
 end
 
 local function SetMoney(amount)
@@ -508,8 +548,12 @@ local function SetMoney(amount)
         return
     end
     local stat = GetMoneyStat()
-    if stat then pcall(function() stat.Value = amount end) Notify("Money", "Set to $" .. amount)
-    else Notify("Money", "No money system found") end
+    if stat then
+        pcall(function() stat.Value = amount end)
+        Notify("Money", "Set to $" .. amount)
+    else
+        Notify("Money", "No money system found")
+    end
 end
 
 -- ═══════════════════════════════════════════════════════════
@@ -593,7 +637,7 @@ local function KillPlayer(name)
     
     local gun = nil
     for _, tool in ipairs(LocalPlayer.Backpack:GetChildren()) do
-        if tool:IsA("Tool") and (tool.Name:find("Glock") or tool.Name:find("AK") or tool.Name:find("Deagle")) then
+        if tool:IsA("Tool") and (tool.Name:find("Glock") or tool.Name:find("AK") or tool.Name:find("Deagle") or tool.Name:find("Gun")) then
             gun = tool; break
         end
     end
@@ -613,280 +657,322 @@ local function KillPlayer(name)
 end
 
 -- ═══════════════════════════════════════════════════════════
---  ORION UI — PARENT TO PLAYERGUI (NOT COREGUI)
+--  RAYFIELD UI SETUP
 -- ═══════════════════════════════════════════════════════════
 
-local Window = Orion:MakeWindow({
+local Window = Rayfield:CreateWindow({
     Name = "ZKILLER // SOUTH BRONX",
-    HidePremium = false,
-    SaveConfig = true,
-    ConfigFolder = "ZKillerStealth",
-    IntroEnabled = true,
-    IntroText = "ZKILLER HUB",
-    IntroIcon = "rbxassetid://4483345998",
-    Icon = "rbxassetid://4483345998"
+    LoadingTitle = "ZKILLER HUB",
+    LoadingSubtitle = "by the invisible man",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "ZKiller",
+        FileName = "SouthBronxConfig"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = ""
+    },
+    KeySystem = true,
+    KeySettings = {
+        Title = "ZKILLER AUTHENTICATION",
+        Subtitle = "Enter your access key",
+        Note = "Key: Zkiller",
+        FileName = "ZKillerKey",
+        SaveKey = true,
+        GrabKeyFromSite = false,
+        Key = {"Zkiller"}
+    }
 })
-
--- KEY SYSTEM (BUILT-IN)
--- Orion doesn't have built-in key, so we add a verification tab first
-
-local KeyVerified = false
-local KeyTab = Window:MakeTab({
-    Name = "Key",
-    Icon = "rbxassetid://4483345998",
-    PremiumOnly = false
-})
-
-KeyTab:AddTextbox({
-    Name = "Enter Key",
-    Default = "",
-    TextDisappear = false,
-    Callback = function(Value)
-        if Value == "Zkiller" then
-            KeyVerified = true
-            Notify("Auth", "Key accepted. Welcome.")
-            -- Remove key tab and show main tabs
-            for _, tab in ipairs(Window.Tabs) do
-                if tab.Name ~= "Key" then
-                    tab.Visible = true
-                end
-            end
-            KeyTab.Visible = false
-        else
-            Notify("Auth", "Invalid key. Try again.")
-        end
-    end
-})
-
-KeyTab:AddLabel("Key: Zkiller")
-
--- Hide all other tabs until key verified
-local CombatTab = Window:MakeTab({Name = "Combat", Icon = "rbxassetid://4483345998", PremiumOnly = false})
-local TeleportTab = Window:MakeTab({Name = "Teleport", Icon = "rbxassetid://4483345998", PremiumOnly = false})
-local SpectateTab = Window:MakeTab({Name = "Spectate", Icon = "rbxassetid://4483345998", PremiumOnly = false})
-local BringTab = Window:MakeTab({Name = "Bring", Icon = "rbxassetid://4483345998", PremiumOnly = false})
-local MoneyTab = Window:MakeTab({Name = "Money", Icon = "rbxassetid://4483345998", PremiumOnly = false})
-local ItemsTab = Window:MakeTab({Name = "Items", Icon = "rbxassetid://4483345998", PremiumOnly = false})
-local KillTab = Window:MakeTab({Name = "Kill", Icon = "rbxassetid://4483345998", PremiumOnly = false})
-
-for _, tab in ipairs({CombatTab, TeleportTab, SpectateTab, BringTab, MoneyTab, ItemsTab, KillTab}) do
-    tab.Visible = false
-end
 
 -- COMBAT TAB
-CombatTab:AddSection({Name = "Aimbot"})
+local CombatTab = Window:CreateTab("Combat", 4483362458)
 
-CombatTab:AddToggle({
+CombatTab:CreateSection("Aimbot")
+
+CombatTab:CreateToggle({
     Name = "Aimbot",
-    Default = false,
+    CurrentValue = false,
+    Flag = "AimbotToggle",
     Callback = function(Value) ToggleAimbot(Value) end
 })
 
-CombatTab:AddDropdown({
+CombatTab:CreateDropdown({
     Name = "Aim Part",
-    Default = "Head",
     Options = {"Head", "Torso", "HumanoidRootPart", "LeftArm", "RightArm"},
+    CurrentOption = "Head",
+    Flag = "AimPartDropdown",
     Callback = function(Value) ZK.Aimbot.Part = Value end
 })
 
-CombatTab:AddSlider({
+CombatTab:CreateSlider({
     Name = "Aimbot FOV",
-    Min = 50, Max = 500, Default = 150,
+    Range = {50, 500},
+    Increment = 10,
+    CurrentValue = 150,
+    Suffix = "px",
+    Flag = "AimbotFOV",
     Callback = function(Value) ZK.Aimbot.FOV = Value end
 })
 
-CombatTab:AddSlider({
+CombatTab:CreateSlider({
     Name = "Smoothness",
-    Min = 1, Max = 20, Default = 3,
+    Range = {1, 20},
+    Increment = 1,
+    CurrentValue = 3,
+    Suffix = "",
+    Flag = "AimbotSmooth",
     Callback = function(Value) ZK.Aimbot.Smoothness = Value end
 })
 
-CombatTab:AddSection({Name = "Silent Aim"})
+CombatTab:CreateSection("Silent Aim")
 
-CombatTab:AddToggle({
+CombatTab:CreateToggle({
     Name = "Silent Aim",
-    Default = false,
+    CurrentValue = false,
+    Flag = "SilentAimToggle",
     Callback = function(Value) ToggleSilentAim(Value) end
 })
 
-CombatTab:AddSlider({
+CombatTab:CreateSlider({
     Name = "Silent Aim FOV",
-    Min = 50, Max = 500, Default = 200,
+    Range = {50, 500},
+    Increment = 10,
+    CurrentValue = 200,
+    Suffix = "px",
+    Flag = "SilentAimFOV",
     Callback = function(Value) ZK.SilentAim.FOV = Value end
 })
 
-CombatTab:AddSlider({
-    Name = "Hit Chance %",
-    Min = 1, Max = 100, Default = 100,
+CombatTab:CreateSlider({
+    Name = "Hit Chance",
+    Range = {1, 100},
+    Increment = 1,
+    CurrentValue = 100,
+    Suffix = "%",
+    Flag = "HitChance",
     Callback = function(Value) ZK.SilentAim.HitChance = Value end
 })
 
-CombatTab:AddSection({Name = "Gun Mods"})
+CombatTab:CreateSection("Gun Mods")
 
-CombatTab:AddToggle({
+CombatTab:CreateToggle({
     Name = "Shoot Through Walls",
-    Default = false,
+    CurrentValue = false,
+    Flag = "WallbangToggle",
     Callback = function(Value) ZK.GunMods.Wallbang = Value; ToggleGunMods() end
 })
 
-CombatTab:AddToggle({
+CombatTab:CreateToggle({
     Name = "Infinite Ammo",
-    Default = false,
+    CurrentValue = false,
+    Flag = "InfAmmoToggle",
     Callback = function(Value) ZK.GunMods.InfiniteAmmo = Value; ToggleGunMods() end
 })
 
-CombatTab:AddToggle({
+CombatTab:CreateToggle({
     Name = "Rapid Fire",
-    Default = false,
+    CurrentValue = false,
+    Flag = "RapidFireToggle",
     Callback = function(Value) ZK.GunMods.RapidFire = Value; ToggleGunMods() end
 })
 
 -- TELEPORT TAB
-TeleportTab:AddSection({Name = "Teleport to Player"})
+local TeleportTab = Window:CreateTab("Teleport", 4483362458)
 
-local TPList = {}
-local TPDropdown = TeleportTab:AddDropdown({
+TeleportTab:CreateSection("Teleport to Player")
+
+local TPDropdown = TeleportTab:CreateDropdown({
     Name = "Select Player",
-    Default = "",
     Options = GetPlayerList(),
-    Callback = function(Value) ZK.SelectedPlayer = Value end
+    CurrentOption = "",
+    Flag = "TeleportDropdown",
+    Callback = function(Option) ZK.SelectedPlayer = Option end
 })
 
-TeleportTab:AddButton({
+TeleportTab:CreateButton({
     Name = "Teleport",
     Callback = function()
-        if ZK.SelectedPlayer then TeleportToPlayer(ZK.SelectedPlayer)
-        else Notify("Teleport", "No player selected") end
+        if ZK.SelectedPlayer and ZK.SelectedPlayer ~= "" then
+            TeleportToPlayer(ZK.SelectedPlayer)
+        else
+            Notify("Teleport", "No player selected")
+        end
     end
 })
 
 -- SPECTATE TAB
-SpectateTab:AddSection({Name = "Spectate Player"})
+local SpectateTab = Window:CreateTab("Spectate", 4483362458)
 
-local SpecList = {}
-local SpecDropdown = SpectateTab:AddDropdown({
+SpectateTab:CreateSection("Spectate Player")
+
+local SpecDropdown = SpectateTab:CreateDropdown({
     Name = "Select Player",
-    Default = "",
     Options = GetPlayerList(),
-    Callback = function(Value) ZK.SelectedPlayer = Value end
+    CurrentOption = "",
+    Flag = "SpectateDropdown",
+    Callback = function(Option) ZK.SelectedPlayer = Option end
 })
 
-SpectateTab:AddButton({
+SpectateTab:CreateButton({
     Name = "Start Spectate",
     Callback = function()
-        if ZK.SelectedPlayer then StartSpectate(ZK.SelectedPlayer)
-        else Notify("Spectate", "No player selected") end
+        if ZK.SelectedPlayer and ZK.SelectedPlayer ~= "" then
+            StartSpectate(ZK.SelectedPlayer)
+        else
+            Notify("Spectate", "No player selected")
+        end
     end
 })
 
-SpectateTab:AddButton({
+SpectateTab:CreateButton({
     Name = "End Spectate",
     Callback = EndSpectate
 })
 
 -- BRING TAB
-BringTab:AddSection({Name = "Bring Player"})
+local BringTab = Window:CreateTab("Bring", 4483362458)
 
-local BringList = {}
-local BringDropdown = BringTab:AddDropdown({
+BringTab:CreateSection("Bring Player")
+
+local BringDropdown = BringTab:CreateDropdown({
     Name = "Select Player",
-    Default = "",
     Options = GetPlayerList(),
-    Callback = function(Value) ZK.SelectedPlayer = Value end
+    CurrentOption = "",
+    Flag = "BringDropdown",
+    Callback = function(Option) ZK.SelectedPlayer = Option end
 })
 
-BringTab:AddButton({
+BringTab:CreateButton({
     Name = "Bring",
     Callback = function()
-        if ZK.SelectedPlayer then BringPlayer(ZK.SelectedPlayer)
-        else Notify("Bring", "No player selected") end
+        if ZK.SelectedPlayer and ZK.SelectedPlayer ~= "" then
+            BringPlayer(ZK.SelectedPlayer)
+        else
+            Notify("Bring", "No player selected")
+        end
     end
 })
 
 -- MONEY TAB
-MoneyTab:AddSection({Name = "Money Farm"})
+local MoneyTab = Window:CreateTab("Money", 4483362458)
 
-MoneyTab:AddToggle({
-    Name = "Auto Farm (Construction)",
-    Default = false,
+MoneyTab:CreateSection("Money Farm")
+
+MoneyTab:CreateToggle({
+    Name = "Auto Farm (Construction Job)",
+    CurrentValue = false,
+    Flag = "MoneyFarmToggle",
     Callback = function(Value) ToggleMoneyFarm(Value) end
 })
 
-MoneyTab:AddSection({Name = "Money Dupe"})
+MoneyTab:CreateSection("Money Dupe")
 
-MoneyTab:AddToggle({
+MoneyTab:CreateToggle({
     Name = "Money Dupe",
-    Default = false,
+    CurrentValue = false,
+    Flag = "MoneyDupeToggle",
     Callback = function(Value) ToggleMoneyDupe(Value) end
 })
 
-MoneyTab:AddSection({Name = "Give Money"})
+MoneyTab:CreateSection("Give Money")
 
-MoneyTab:AddTextbox({
-    Name = "Amount",
-    Default = "",
-    TextDisappear = false,
+MoneyTab:CreateInput({
+    Name = "Amount to Give",
+    PlaceholderText = "Enter amount...",
+    RemoveTextAfterFocusLost = false,
     Callback = function(Value) GiveMoney(Value) end
 })
 
-MoneyTab:AddSection({Name = "Set Money"})
+MoneyTab:CreateSection("Set Money")
 
-MoneyTab:AddTextbox({
-    Name = "Amount",
-    Default = "",
-    TextDisappear = false,
+MoneyTab:CreateInput({
+    Name = "Set Amount",
+    PlaceholderText = "Enter amount...",
+    RemoveTextAfterFocusLost = false,
     Callback = function(Value) SetMoney(Value) end
 })
 
 -- ITEMS TAB
-ItemsTab:AddSection({Name = "Give Item"})
+local ItemsTab = Window:CreateTab("Items", 4483362458)
 
-ItemsTab:AddDropdown({
+ItemsTab:CreateSection("Give Item")
+
+ItemsTab:CreateDropdown({
     Name = "Select Item",
-    Default = ZK.Items[1],
     Options = ZK.Items,
+    CurrentOption = ZK.Items[1],
+    Flag = "ItemDropdown",
     Callback = function(Value) ZK.SelectedItem = Value end
 })
 
-ItemsTab:AddTextbox({
-    Name = "Custom Item",
-    Default = "",
-    TextDisappear = false,
+ItemsTab:CreateInput({
+    Name = "Custom Item Name",
+    PlaceholderText = "Or type custom name...",
+    RemoveTextAfterFocusLost = false,
     Callback = function(Value) if Value ~= "" then ZK.SelectedItem = Value end end
 })
 
-ItemsTab:AddButton({
+ItemsTab:CreateButton({
     Name = "Give Item",
     Callback = function()
-        if ZK.SelectedItem then GiveItem(ZK.SelectedItem)
-        else Notify("Items", "No item selected") end
+        if ZK.SelectedItem then
+            GiveItem(ZK.SelectedItem)
+        else
+            Notify("Items", "No item selected")
+        end
     end
 })
 
-ItemsTab:AddSection({Name = "Item Dupe"})
+ItemsTab:CreateSection("Item Dupe")
 
-ItemsTab:AddButton({
+ItemsTab:CreateButton({
     Name = "Dupe Held Item",
     Callback = DupeItem
 })
 
 -- KILL TAB
-KillTab:AddSection({Name = "Kill Player"})
+local KillTab = Window:CreateTab("Kill", 4483362458)
 
-local KillList = {}
-local KillDropdown = KillTab:AddDropdown({
+KillTab:CreateSection("Kill Player")
+
+local KillDropdown = KillTab:CreateDropdown({
     Name = "Select Player",
-    Default = "",
     Options = GetPlayerList(),
-    Callback = function(Value) ZK.SelectedPlayer = Value end
+    CurrentOption = "",
+    Flag = "KillDropdown",
+    Callback = function(Option) ZK.SelectedPlayer = Option end
 })
 
-KillTab:AddButton({
+KillTab:CreateButton({
     Name = "Kill",
     Callback = function()
-        if ZK.SelectedPlayer then KillPlayer(ZK.SelectedPlayer)
-        else Notify("Kill", "No player selected") end
+        if ZK.SelectedPlayer and ZK.SelectedPlayer ~= "" then
+            KillPlayer(ZK.SelectedPlayer)
+        else
+            Notify("Kill", "No player selected")
+        end
     end
+})
+
+-- SETTINGS TAB
+local SettingsTab = Window:CreateTab("Settings", 4483362458)
+
+SettingsTab:CreateSection("Anti-Cheat")
+
+SettingsTab:CreateButton({
+    Name = "Scan Remotes",
+    Callback = function()
+        ScanRemotes()
+        Notify("Scanner", "Remote scan complete")
+    end
+})
+
+SettingsTab:CreateSection("Credits")
+
+SettingsTab:CreateParagraph({
+    Title = "ZKILLER HUB",
+    Content = "Made by the invisible man\nVersion: 5.0\nGame: South Bronx: The Trenches\nUI: Rayfield 2026"
 })
 
 -- UPDATE PLAYER LISTS
@@ -909,5 +995,5 @@ end)
 -- INIT
 task.delay(2, function()
     ScanRemotes()
-    Notify("ZKILLER", "Stealth edition loaded. Enter key: Zkiller")
+    Notify("ZKILLER", "South Bronx loaded. Key: Zkiller | by the invisible man")
 end)

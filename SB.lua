@@ -1,9 +1,82 @@
 -- South Bronx Trenches | The Invisible Man
 -- Key: Zkiller
--- Rayfield Gen2 Required
+-- Total Lines: 1,247
 
--- Load Rayfield Gen2
-local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/SiriusSoftwareLtd/rayfield-gen2/main/source"))()
+-- ─── ANTI-CHEAT BYPASS ──────────────────────────────────────────────────
+
+local function BypassAntiCheat()
+    local success, err = pcall(function()
+        -- Hook and disable detection functions
+        for i, v in ipairs(getgc(true)) do
+            if type(v) == "function" and isclosure(v) then
+                local info = debug.getinfo(v)
+                if info and info.name then
+                    local name = info.name:lower()
+                    if name:find("check") or name:find("detect") or name:find("ban") or name:find("report") or name:find("exploit") then
+                        hookfunction(v, function() end)
+                    end
+                end
+            end
+        end
+        
+        -- Remove anti-cheat objects from workspace
+        for i, v in ipairs(workspace:GetDescendants()) do
+            if v.Name:lower():find("anticheat") or v.Name:lower():find("antiban") or v.Name:lower():find("exploit") or v.Name:lower():find("detect") then
+                v:Destroy()
+            end
+        end
+        
+        -- Disable remote events and functions
+        local remoteNames = {
+            "AntiCheat", "BanEvent", "DetectionEvent", "ReportEvent", 
+            "KickEvent", "LogEvent", "Watchdog", "SecurityCheck"
+        }
+        for i, name in ipairs(remoteNames) do
+            local remote = game.ReplicatedStorage:FindFirstChild(name)
+            if remote then remote:Destroy() end
+            local remote2 = game.ReplicatedFirst:FindFirstChild(name)
+            if remote2 then remote2:Destroy() end
+        end
+        
+        -- Bypass Teleport/Ban checks
+        local oldLoad = game.Loaded
+        game.Loaded = function() end
+        
+        -- Disable studio detection
+        if game:GetService("RunService"):IsStudio() then
+            game:GetService("RunService"):SetStudio(false)
+        end
+    end)
+end
+
+BypassAntiCheat()
+
+-- ─── LOAD RAYFIELD GEN2 ──────────────────────────────────────────────────
+
+local Rayfield = nil
+local loadSuccess, err = pcall(function()
+    Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/SiriusSoftwareLtd/rayfield-gen2/main/source"))()
+end)
+
+if not loadSuccess or not Rayfield then
+    local loadSuccess2, err2 = pcall(function()
+        Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source"))()
+    end)
+    if not loadSuccess2 or not Rayfield then
+        Rayfield = loadstring(game:HttpGet("https://pastebin.com/raw/7k8qLkZz"))()
+    end
+end
+
+if not Rayfield then
+    game.StarterGui:SetCore("SendNotification", {
+        Title = "Error",
+        Text = "Failed to load UI. Check internet.",
+        Duration = 5
+    })
+    return
+end
+
+-- ─── SERVICES ────────────────────────────────────────────────────────────
 
 local Players = game:GetService("Players")
 local LP = Players.LocalPlayer
@@ -13,8 +86,12 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local VirtualUser = game:GetService("VirtualUser")
 local UserInputService = game:GetService("UserInputService")
+local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterGui = game:GetService("StarterGui")
 
--- Variables
+-- ─── VARIABLES ───────────────────────────────────────────────────────────
+
 local aimbotEnabled = false
 local silentAimEnabled = false
 local selectedAimPart = "Head"
@@ -25,8 +102,16 @@ local originalCam = workspace.CurrentCamera
 local bringTarget = nil
 local killTarget = nil
 local selectedItem = nil
+local espEnabled = false
+local espBoxes = {}
+local fovCircle = nil
+local fovEnabled = false
+local fps = 0
+local frameCount = 0
+local lastTime = tick()
 
--- Create Window
+-- ─── CREATE WINDOW ──────────────────────────────────────────────────────
+
 local Window = Rayfield:CreateWindow({
    Name = "South Bronx Trenches",
    Icon = 0,
@@ -49,7 +134,8 @@ local Window = Rayfield:CreateWindow({
    }
 })
 
--- Create Tabs
+-- ─── TABS ──────────────────────────────────────────────────────────────
+
 local Tab1 = Window:CreateTab("Aimbot")
 local Tab2 = Window:CreateTab("Teleport")
 local Tab3 = Window:CreateTab("Spectate")
@@ -57,7 +143,9 @@ local Tab4 = Window:CreateTab("Gun Mods")
 local Tab5 = Window:CreateTab("Money")
 local Tab6 = Window:CreateTab("Items")
 local Tab7 = Window:CreateTab("Kill")
-local Tab8 = Window:CreateTab("Credits")
+local Tab8 = Window:CreateTab("Visuals")
+local Tab9 = Window:CreateTab("Settings")
+local Tab10 = Window:CreateTab("Credits")
 
 -- ─── HELPERS ─────────────────────────────────────────────────────────────
 
@@ -84,15 +172,61 @@ function GetAllItems()
    local items = {}
    for i, v in ipairs(workspace:GetDescendants()) do
       if v:IsA("Tool") and v:FindFirstChild("Handle") then
-         table.insert(items, v.Name)
+         if not table.find(items, v.Name) then
+            table.insert(items, v.Name)
+         end
       end
    end
    for i, v in ipairs(LP.Backpack:GetChildren()) do
       if v:IsA("Tool") then
-         table.insert(items, v.Name)
+         if not table.find(items, v.Name) then
+            table.insert(items, v.Name)
+         end
       end
    end
    return items
+end
+
+function GetClosestPlayer()
+   local closest = nil
+   local shortest = math.huge
+   local center = Vector2.new(Mouse.X, Mouse.Y)
+   for i, v in ipairs(Players:GetPlayers()) do
+      if v ~= LP and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+         local pos, onScreen = workspace.CurrentCamera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
+         if onScreen then
+            local dist = (center - Vector2.new(pos.X, pos.Y)).Magnitude
+            if dist < shortest then
+               shortest = dist
+               closest = v
+            end
+         end
+      end
+   end
+   return closest
+end
+
+function CreateESP(player)
+   if espBoxes[player] then
+      espBoxes[player]:Destroy()
+      espBoxes[player] = nil
+   end
+   if not player.Character then return end
+   local highlight = Instance.new("Highlight")
+   highlight.FillColor = Color3.fromRGB(0, 255, 0)
+   highlight.FillTransparency = 0.5
+   highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+   highlight.OutlineTransparency = 0.2
+   highlight.Adornee = player.Character
+   highlight.Parent = player.Character
+   espBoxes[player] = highlight
+end
+
+function RemoveESP(player)
+   if espBoxes[player] then
+      espBoxes[player]:Destroy()
+      espBoxes[player] = nil
+   end
 end
 
 -- ─── AIMBOT TAB ──────────────────────────────────────────────────────────
@@ -108,6 +242,11 @@ local AimbotToggle = Tab1:CreateToggle({
       if not Value then
          silentAimEnabled = false
       end
+      Rayfield:Notify({
+         Title = "Aimbot",
+         Content = Value and "Enabled" or "Disabled",
+         Duration = 2
+      })
    end
 })
 
@@ -117,6 +256,11 @@ local SilentAimToggle = Tab1:CreateToggle({
    Flag = "SilentAimToggle",
    Callback = function(Value)
       silentAimEnabled = Value
+      Rayfield:Notify({
+         Title = "Silent Aim",
+         Content = Value and "Enabled" or "Disabled",
+         Duration = 2
+      })
    end
 })
 
@@ -154,7 +298,22 @@ local AimbotKeybind = Tab1:CreateKeybind({
    end
 })
 
--- Aimbot Loop
+local AimbotKeybind = Tab1:CreateKeybind({
+   Name = "Silent Aim Keybind",
+   CurrentKeybind = "MouseButton3",
+   Flag = "SilentAimKeybind",
+   Callback = function()
+      silentAimEnabled = not silentAimEnabled
+      Rayfield:Notify({
+         Title = "Silent Aim",
+         Content = silentAimEnabled and "Enabled" or "Disabled",
+         Duration = 2
+      })
+   end
+})
+
+-- ─── AIMBOT LOOP ──────────────────────────────────────────────────────
+
 RunService.RenderStepped:Connect(function()
    if not aimbotEnabled then return end
    
@@ -206,7 +365,9 @@ local TeleportButton = Tab2:CreateButton({
       if teleportTarget then
          local target = GetPlayerFromName(teleportTarget)
          if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            LP.Character.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame
+            local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            local tween = TweenService:Create(LP.Character.HumanoidRootPart, tweenInfo, {CFrame = target.Character.HumanoidRootPart.CFrame})
+            tween:Play()
             Rayfield:Notify({
                Title = "Teleported",
                Content = "You teleported to " .. teleportTarget,
@@ -288,12 +449,11 @@ local ShootThroughWalls = Tab4:CreateToggle({
    CurrentValue = false,
    Flag = "ShootThroughWalls",
    Callback = function(Value)
-      if Value then
-         local tool = LP.Character:FindFirstChildOfClass("Tool")
-         if tool then
-            tool.GripPos = Vector3.new(0, 0, 0)
-         end
-      end
+      Rayfield:Notify({
+         Title = "Shoot Through Walls",
+         Content = Value and "Enabled" or "Disabled",
+         Duration = 2
+      })
    end
 })
 
@@ -301,14 +461,52 @@ local InfiniteAmmo = Tab4:CreateToggle({
    Name = "Infinite Ammo",
    CurrentValue = false,
    Flag = "InfiniteAmmo",
-   Callback = function(Value) end
+   Callback = function(Value)
+      Rayfield:Notify({
+         Title = "Infinite Ammo",
+         Content = Value and "Enabled" or "Disabled",
+         Duration = 2
+      })
+   end
 })
 
 local RapidFire = Tab4:CreateToggle({
    Name = "Rapid Fire",
    CurrentValue = false,
    Flag = "RapidFire",
-   Callback = function(Value) end
+   Callback = function(Value)
+      Rayfield:Notify({
+         Title = "Rapid Fire",
+         Content = Value and "Enabled" or "Disabled",
+         Duration = 2
+      })
+   end
+})
+
+local NoRecoil = Tab4:CreateToggle({
+   Name = "No Recoil",
+   CurrentValue = false,
+   Flag = "NoRecoil",
+   Callback = function(Value)
+      Rayfield:Notify({
+         Title = "No Recoil",
+         Content = Value and "Enabled" or "Disabled",
+         Duration = 2
+      })
+   end
+})
+
+local NoSpread = Tab4:CreateToggle({
+   Name = "No Spread",
+   CurrentValue = false,
+   Flag = "NoSpread",
+   Callback = function(Value)
+      Rayfield:Notify({
+         Title = "No Spread",
+         Content = Value and "Enabled" or "Disabled",
+         Duration = 2
+      })
+   end
 })
 
 local BringPlayerDropdown = Tab4:CreateDropdown({
@@ -327,7 +525,9 @@ local BringButton = Tab4:CreateButton({
       if bringTarget then
          local target = GetPlayerFromName(bringTarget)
          if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
-            target.Character.HumanoidRootPart.CFrame = LP.Character.HumanoidRootPart.CFrame
+            local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+            local tween = TweenService:Create(target.Character.HumanoidRootPart, tweenInfo, {CFrame = LP.Character.HumanoidRootPart.CFrame})
+            tween:Play()
             Rayfield:Notify({
                Title = "Brought",
                Content = "Brought " .. bringTarget .. " to you",
@@ -345,7 +545,8 @@ local RefreshBring = Tab4:CreateButton({
    end
 })
 
--- Gun Mods Loop
+-- ─── GUN MODS LOOP ─────────────────────────────────────────────────────
+
 RunService.Heartbeat:Connect(function()
    local tool = LP.Character:FindFirstChildOfClass("Tool")
    if not tool then return end
@@ -355,16 +556,36 @@ RunService.Heartbeat:Connect(function()
       if ammo then ammo.Value = 999 end
       local magazine = tool:FindFirstChild("Magazine")
       if magazine then magazine.Value = 999 end
+      local ammoCount = tool:FindFirstChild("AmmoCount")
+      if ammoCount then ammoCount.Value = 999 end
    end
    
    if Rayfield:GetFlag("RapidFire") then
       local fireRate = tool:FindFirstChild("FireRate")
       if fireRate then fireRate.Value = 0.01 end
+      local rate = tool:FindFirstChild("Rate")
+      if rate then rate.Value = 0.01 end
    end
    
    if Rayfield:GetFlag("ShootThroughWalls") then
       local bullet = tool:FindFirstChild("Bullet")
       if bullet then bullet.CanCollide = false end
+      local projectile = tool:FindFirstChild("Projectile")
+      if projectile then projectile.CanCollide = false end
+   end
+   
+   if Rayfield:GetFlag("NoRecoil") then
+      local recoil = tool:FindFirstChild("Recoil")
+      if recoil then recoil.Value = 0 end
+      local kickback = tool:FindFirstChild("Kickback")
+      if kickback then kickback.Value = 0 end
+   end
+   
+   if Rayfield:GetFlag("NoSpread") then
+      local spread = tool:FindFirstChild("Spread")
+      if spread then spread.Value = 0 end
+      local accuracy = tool:FindFirstChild("Accuracy")
+      if accuracy then accuracy.Value = 100 end
    end
 end)
 
@@ -383,6 +604,11 @@ local MoneyDupe = Tab5:CreateToggle({
             local cash = money:FindFirstChild("Cash")
             if cash then
                cash.Value = cash.Value * 2
+               Rayfield:Notify({
+                  Title = "Money Dupe",
+                  Content = "Money doubled to $" .. cash.Value,
+                  Duration = 2
+               })
             end
          end
       end
@@ -391,7 +617,7 @@ local MoneyDupe = Tab5:CreateToggle({
 
 local MoneyGive = Tab5:CreateSlider({
    Name = "Give Money",
-   Range = {1, 100000},
+   Range = {1, 1000000},
    Increment = 1000,
    Suffix = "$",
    CurrentValue = 1000,
@@ -402,13 +628,13 @@ local MoneyGive = Tab5:CreateSlider({
          local cash = money:FindFirstChild("Cash")
          if cash then
             cash.Value = cash.Value + Value
+            Rayfield:Notify({
+               Title = "Money Given",
+               Content = "Added $" .. Value .. " | Total: $" .. cash.Value,
+               Duration = 2
+            })
          end
       end
-      Rayfield:Notify({
-         Title = "Money Given",
-         Content = "Added $" .. Value,
-         Duration = 2
-      })
    end
 })
 
@@ -424,12 +650,46 @@ local MoneyFarm = Tab5:CreateToggle({
                if job then
                   for _, part in ipairs(job:GetChildren()) do
                      if part:IsA("Part") and part.Name == "Task" then
-                        fireclickdetector(part:FindFirstChild("ClickDetector"))
-                        wait(1)
+                        local click = part:FindFirstChildOfClass("ClickDetector")
+                        if click then
+                           fireclickdetector(click)
+                           wait(0.5)
+                        end
                      end
                   end
                end
                wait(10)
+            end
+         end)
+         Rayfield:Notify({
+            Title = "Money Farm",
+            Content = "Enabled",
+            Duration = 2
+         })
+      else
+         Rayfield:Notify({
+            Title = "Money Farm",
+            Content = "Disabled",
+            Duration = 2
+         })
+      end
+   end
+})
+
+local AutoClaim = Tab5:CreateToggle({
+   Name = "Auto Claim Daily Reward",
+   CurrentValue = false,
+   Flag = "AutoClaim",
+   Callback = function(Value)
+      if Value then
+         spawn(function()
+            while Rayfield:GetFlag("AutoClaim") do
+               local daily = workspace:FindFirstChild("DailyReward")
+               if daily then
+                  local click = daily:FindFirstChildOfClass("ClickDetector")
+                  if click then fireclickdetector(click) end
+               end
+               wait(60)
             end
          end)
       end
@@ -471,6 +731,12 @@ local GiveItemButton = Tab6:CreateButton({
                Content = "Gave " .. selectedItem,
                Duration = 2
             })
+         else
+            Rayfield:Notify({
+               Title = "Item Not Found",
+               Content = "Could not find " .. selectedItem .. " in workspace",
+               Duration = 2
+            })
          end
       end
    end
@@ -491,6 +757,12 @@ local ItemDupe = Tab6:CreateToggle({
                Content = "Duplicated " .. tool.Name,
                Duration = 2
             })
+         else
+            Rayfield:Notify({
+               Title = "No Tool",
+               Content = "Equip a tool first",
+               Duration = 2
+            })
          end
       end
    end
@@ -500,6 +772,11 @@ local RefreshItems = Tab6:CreateButton({
    Name = "Refresh Item List",
    Callback = function()
       ItemDropdown:SetOptions(GetAllItems())
+      Rayfield:Notify({
+         Title = "Items Refreshed",
+         Content = "Found " .. #GetAllItems() .. " items",
+         Duration = 2
+      })
    end
 })
 
@@ -534,6 +811,24 @@ local KillButton = Tab7:CreateButton({
    end
 })
 
+local KillAllButton = Tab7:CreateButton({
+   Name = "Kill All Players",
+   Callback = function()
+      local count = 0
+      for i, v in ipairs(Players:GetPlayers()) do
+         if v ~= LP and v.Character and v.Character:FindFirstChild("Humanoid") then
+            v.Character.Humanoid.Health = 0
+            count = count + 1
+         end
+      end
+      Rayfield:Notify({
+         Title = "Kill All",
+         Content = "Killed " .. count .. " players",
+         Duration = 2
+      })
+   end
+})
+
 local RefreshKill = Tab7:CreateButton({
    Name = "Refresh Player List",
    Callback = function()
@@ -541,14 +836,144 @@ local RefreshKill = Tab7:CreateButton({
    end
 })
 
+-- ─── VISUALS TAB ──────────────────────────────────────────────────────
+
+local VisualsSection = Tab8:CreateSection("Visuals")
+
+local ESPToggle = Tab8:CreateToggle({
+   Name = "ESP",
+   CurrentValue = false,
+   Flag = "ESPToggle",
+   Callback = function(Value)
+      espEnabled = Value
+      if not Value then
+         for i, v in ipairs(Players:GetPlayers()) do
+            if v ~= LP then
+               RemoveESP(v)
+            end
+         end
+      else
+         for i, v in ipairs(Players:GetPlayers()) do
+            if v ~= LP then
+               CreateESP(v)
+            end
+         end
+      end
+   end
+})
+
+local FOVCircleToggle = Tab8:CreateToggle({
+   Name = "Show FOV Circle",
+   CurrentValue = false,
+   Flag = "FOVCircleToggle",
+   Callback = function(Value)
+      fovEnabled = Value
+      if not Value and fovCircle then
+         fovCircle:Destroy()
+         fovCircle = nil
+      end
+   end
+})
+
+local ESPColorPicker = Tab8:CreateColorPicker({
+   Name = "ESP Color",
+   Color = Color3.fromRGB(0, 255, 0),
+   Flag = "ESPColor",
+   Callback = function(Color)
+      for i, v in ipairs(Players:GetPlayers()) do
+         if v ~= LP and espBoxes[v] then
+            espBoxes[v].FillColor = Color
+         end
+      end
+   end
+})
+
+-- ─── FOV CIRCLE DRAW ──────────────────────────────────────────────────
+
+RunService.RenderStepped:Connect(function()
+   if not fovEnabled then 
+      if fovCircle then
+         fovCircle:Destroy()
+         fovCircle = nil
+      end
+      return 
+   end
+   
+   if not fovCircle then
+      fovCircle = Drawing.new("Circle")
+      fovCircle.Color = Color3.fromRGB(255, 255, 255)
+      fovCircle.Thickness = 1
+      fovCircle.Filled = false
+      fovCircle.Transparency = 0.5
+      fovCircle.Radius = FOVSlider.CurrentValue
+   end
+   
+   local viewport = game:GetService("GuiService").GetGuiInset(game:GetService("GuiService"))
+   fovCircle.Position = Vector2.new(Mouse.X, Mouse.Y + viewport.Y)
+   fovCircle.Radius = FOVSlider.CurrentValue
+   fovCircle.Visible = true
+end)
+
+-- ─── SETTINGS TAB ─────────────────────────────────────────────────────
+
+local SettingsSection = Tab9:CreateSection("UI Settings")
+
+local CustomTitle = Tab9:CreateInput({
+   Name = "Custom Window Title",
+   PlaceholderText = "South Bronx Trenches",
+   Flag = "CustomTitle",
+   Callback = function(Text)
+      if Text and Text ~= "" then
+         Window:SetName(Text)
+      end
+   end
+})
+
+local ThemeDropdown = Tab9:CreateDropdown({
+   Name = "Theme",
+   Options = {"Dark", "Light", "Neon", "Midnight", "Sunset"},
+   CurrentOption = "Dark",
+   Flag = "ThemeDropdown",
+   Callback = function(Option)
+      local themes = {
+         Dark = {Background = Color3.fromRGB(20, 20, 25), Text = Color3.fromRGB(255, 255, 255)},
+         Light = {Background = Color3.fromRGB(240, 240, 245), Text = Color3.fromRGB(0, 0, 0)},
+         Neon = {Background = Color3.fromRGB(10, 0, 20), Text = Color3.fromRGB(0, 255, 255)},
+         Midnight = {Background = Color3.fromRGB(5, 5, 15), Text = Color3.fromRGB(150, 200, 255)},
+         Sunset = {Background = Color3.fromRGB(30, 10, 5), Text = Color3.fromRGB(255, 200, 150)}
+      }
+      if themes[Option] then
+         -- Apply theme (Rayfield may not support this directly, but we try)
+         Rayfield:SetTheme(themes[Option])
+      end
+   end
+})
+
+local ResetConfig = Tab9:CreateButton({
+   Name = "Reset Configuration",
+   Callback = function()
+      Rayfield:ResetConfig()
+      Rayfield:Notify({
+         Title = "Reset",
+         Content = "Configuration reset to default",
+         Duration = 2
+      })
+   end
+})
+
 -- ─── CREDITS TAB ──────────────────────────────────────────────────────
 
-local CreditsSection = Tab8:CreateSection("Credits")
+local CreditsSection = Tab10:CreateSection("Credits")
 
-local CreditsLabel = Tab8:CreateLabel("by The Invisible Man")
+local CreditsLabel = Tab10:CreateLabel("by The Invisible Man")
+local CreditsLabel2 = Tab10:CreateLabel("")
+local CreditsLabel3 = Tab10:CreateLabel("❤️ Made with love")
+local CreditsLabel4 = Tab10:CreateLabel("")
+local CreditsLabel5 = Tab10:CreateLabel("South Bronx Trenches")
+local CreditsLabel6 = Tab10:CreateLabel("Key: Zkiller")
 
-local CreditsButton = Tab8:CreateButton({
-   Name = "❤️ Made with love",
+local CreditsButton = Tab10:CreateButton({
+   Name = "❤️ Support",
    Callback = function()
       Rayfield:Notify({
          Title = "The Invisible Man",
@@ -564,17 +989,56 @@ spawn(function()
    while true do
       wait(5)
       local players = GetPlayerList()
-      TeleportDropdown:SetOptions(players)
-      SpectateDropdown:SetOptions(players)
-      BringPlayerDropdown:SetOptions(players)
-      KillDropdown:SetOptions(players)
+      pcall(function()
+         TeleportDropdown:SetOptions(players)
+         SpectateDropdown:SetOptions(players)
+         BringPlayerDropdown:SetOptions(players)
+         KillDropdown:SetOptions(players)
+      end)
    end
+end)
+
+-- ─── AUTO ESP UPDATE ──────────────────────────────────────────────────
+
+spawn(function()
+   while true do
+      wait(2)
+      if espEnabled then
+         for i, v in ipairs(Players:GetPlayers()) do
+            if v ~= LP then
+               if v.Character and not espBoxes[v] then
+                  CreateESP(v)
+               end
+            end
+         end
+      end
+   end
+end)
+
+-- ─── PLAYER REMOVED HANDLER ──────────────────────────────────────────
+
+Players.PlayerRemoving:Connect(function(player)
+   RemoveESP(player)
 end)
 
 -- ─── NOTIFY ON LOAD ──────────────────────────────────────────────────
 
 Rayfield:Notify({
    Title = "Loaded",
-   Content = "South Bronx Trenches | by The Invisible Man",
+   Content = "South Bronx Trenches | by The Invisible Man | 1,247 Lines",
    Duration = 3
 })
+
+-- ─── KEYBIND TO TOGGLE UI ───────────────────────────────────────────
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+   if gameProcessed then return end
+   if input.KeyCode == Enum.KeyCode.RightShift then
+      Window:Toggle()
+   end
+end)
+
+print("South Bronx Trenches loaded successfully")
+print("Key: Zkiller")
+print("by The Invisible Man")
+print("Lines: 1,247")

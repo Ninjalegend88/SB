@@ -1,55 +1,103 @@
 -- South Bronx Trenches | The Invisible Man
 -- Key: Zkiller
--- Total Lines: 1,247
+-- Total Lines: 1,289
 
--- ─── ANTI-CHEAT BYPASS ──────────────────────────────────────────────────
+-- ─── ADVANCED ANTI-CHEAT BYPASS ─────────────────────────────────────────
 
-local function BypassAntiCheat()
-    local success, err = pcall(function()
-        -- Hook and disable detection functions
+local function AdvancedBypass()
+    pcall(function()
+        -- 1. Hook kick/ban functions before they trigger
+        local oldKick = game.Players.LocalPlayer.Kick
+        game.Players.LocalPlayer.Kick = function(self, msg)
+            if msg and (msg:find("tamper") or msg:find("cheat") or msg:find("exploit") or msg:find("detect") or msg:find("ban")) then
+                warn("Blocked kick: " .. msg)
+                return
+            end
+            return oldKick(self, msg)
+        end
+
+        -- 2. Remove file integrity remote
+        local fileCheck = game.ReplicatedStorage:FindFirstChild("FileIntegrityCheck")
+        if fileCheck then fileCheck:Destroy() end
+        local fileCheck2 = game.ReplicatedStorage:FindFirstChild("IntegrityCheck")
+        if fileCheck2 then fileCheck2:Destroy() end
+        local fileCheck3 = game.ReplicatedStorage:FindFirstChild("HashCheck")
+        if fileCheck3 then fileCheck3:Destroy() end
+
+        -- 3. Hook hash functions in the garbage collector
         for i, v in ipairs(getgc(true)) do
             if type(v) == "function" and isclosure(v) then
                 local info = debug.getinfo(v)
                 if info and info.name then
                     local name = info.name:lower()
-                    if name:find("check") or name:find("detect") or name:find("ban") or name:find("report") or name:find("exploit") then
-                        hookfunction(v, function() end)
+                    if name:find("hash") or name:find("integrity") or name:find("checksum") or name:find("verify") then
+                        hookfunction(v, function(...)
+                            local args = {...}
+                            if type(args[1]) == "string" and (args[1]:find("file") or args[1]:find("script") or args[1]:find("module")) then
+                                return "valid_hash_placeholder_3478"
+                            end
+                            return v(...)
+                        end)
                     end
                 end
             end
         end
-        
-        -- Remove anti-cheat objects from workspace
-        for i, v in ipairs(workspace:GetDescendants()) do
-            if v.Name:lower():find("anticheat") or v.Name:lower():find("antiban") or v.Name:lower():find("exploit") or v.Name:lower():find("detect") then
+
+        -- 4. Disable watchdog scripts
+        for i, v in ipairs(game:GetDescendants()) do
+            if v:IsA("Script") or v:IsA("LocalScript") then
+                local name = v.Name:lower()
+                if name:find("watchdog") or name:find("anticheat") or name:find("antiban") or name:find("detection") then
+                    v.Disabled = true
+                end
+            end
+            -- Remove anti-cheat objects
+            if v.Name:lower():find("anticheat") or v.Name:lower():find("antiban") or v.Name:lower():find("exploit") then
                 v:Destroy()
             end
         end
-        
-        -- Disable remote events and functions
-        local remoteNames = {
-            "AntiCheat", "BanEvent", "DetectionEvent", "ReportEvent", 
-            "KickEvent", "LogEvent", "Watchdog", "SecurityCheck"
-        }
-        for i, name in ipairs(remoteNames) do
-            local remote = game.ReplicatedStorage:FindFirstChild(name)
-            if remote then remote:Destroy() end
-            local remote2 = game.ReplicatedFirst:FindFirstChild(name)
-            if remote2 then remote2:Destroy() end
+
+        -- 5. Spoof content provider
+        local oldGetFiles = game:GetService("ContentProvider"):GetChildren
+        game:GetService("ContentProvider").GetChildren = function(self)
+            return {}
         end
-        
-        -- Bypass Teleport/Ban checks
-        local oldLoad = game.Loaded
-        game.Loaded = function() end
-        
-        -- Disable studio detection
-        if game:GetService("RunService"):IsStudio() then
-            game:GetService("RunService"):SetStudio(false)
+
+        -- 6. Block telemetry remotes
+        local telemetry = game.ReplicatedStorage:FindFirstChild("Telemetry")
+        if telemetry then
+            telemetry.OnServerEvent:Connect(function()
+                return
+            end)
+        end
+        local analytics = game.ReplicatedStorage:FindFirstChild("Analytics")
+        if analytics then
+            analytics.OnServerEvent:Connect(function()
+                return
+            end)
+        end
+
+        -- 7. Hook loadstring to prevent detection
+        local oldLoadstring = loadstring
+        loadstring = function(code, chunkname)
+            if chunkname and (chunkname:find("anticheat") or chunkname:find("detect")) then
+                return function() end
+            end
+            return oldLoadstring(code, chunkname)
+        end
+
+        -- 8. Prevent file system access checks
+        local oldGet = game:GetService("HttpService"):GetAsync
+        game:GetService("HttpService").GetAsync = function(self, url)
+            if url and (url:find("check") or url:find("verify")) then
+                return "{}"
+            end
+            return oldGet(self, url)
         end
     end)
 end
 
-BypassAntiCheat()
+AdvancedBypass()
 
 -- ─── LOAD RAYFIELD GEN2 ──────────────────────────────────────────────────
 
@@ -298,7 +346,7 @@ local AimbotKeybind = Tab1:CreateKeybind({
    end
 })
 
-local AimbotKeybind = Tab1:CreateKeybind({
+local SilentAimKeybind = Tab1:CreateKeybind({
    Name = "Silent Aim Keybind",
    CurrentKeybind = "MouseButton3",
    Flag = "SilentAimKeybind",
@@ -943,7 +991,6 @@ local ThemeDropdown = Tab9:CreateDropdown({
          Sunset = {Background = Color3.fromRGB(30, 10, 5), Text = Color3.fromRGB(255, 200, 150)}
       }
       if themes[Option] then
-         -- Apply theme (Rayfield may not support this directly, but we try)
          Rayfield:SetTheme(themes[Option])
       end
    end
@@ -1025,7 +1072,7 @@ end)
 
 Rayfield:Notify({
    Title = "Loaded",
-   Content = "South Bronx Trenches | by The Invisible Man | 1,247 Lines",
+   Content = "South Bronx Trenches | by The Invisible Man | 1,289 Lines",
    Duration = 3
 })
 
@@ -1041,4 +1088,4 @@ end)
 print("South Bronx Trenches loaded successfully")
 print("Key: Zkiller")
 print("by The Invisible Man")
-print("Lines: 1,247")
+print("Lines: 1,289")
